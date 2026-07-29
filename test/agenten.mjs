@@ -3605,6 +3605,56 @@ try {
   ok("Agent 164 – Der Verlauf überlebt den Neustart der App");
 } catch (e) { bad("Agent 164", e); }
 
+// ---------------- Agent 165: Prüfdatei gegen die ECHTE preise.json
+// Der einzige Agent, der die richtigen 52.253 Artikel benutzt. Die Erwartungen sind
+// überwiegend negativ formuliert: die Datei wird täglich neu gebaut, eine Erwartung
+// auf einen bestimmten Artikelnamen wäre morgen kaputt. Was NICHT oben stehen darf,
+// bleibt dagegen richtig, egal welche Milch gerade die billigste ist.
+const PRUEF = [
+  { q: "Milch",    nicht: ["schokolade","kakao","scheuermilch","sonnenmilch","anfangsmilch","folgemilch","reinigungsmilch","flaschensauger"] },
+  { q: "Butter",   nicht: ["peanut","körperbutter","nagelbutter","sheabutter","laugenbrez","brötle"] },
+  { q: "Käse",     nicht: ["katzensnack","dreamies","chips","cabanossi","maccaroni"] },
+  { q: "Joghurt",  nicht: ["milka","ritter sport","hundefutter","vitakraft","lachgummi","reiswaffel"] },
+  { q: "Kaffee",   nicht: ["joghurt","jogurt","knusper"] },
+  { q: "Zucker",   nicht: ["ohne zucker"] },
+  { q: "Eier",     nicht: ["rostfrei","hautschere","eier-salat"] },
+  { q: "Erdäpfel", nicht: ["chips","dippers"] },
+  { q: "Klopapier",   nicht: [], muss: "toilettenpapier" },   // Kontrollfall: Synonym
+  { q: "Waschmittel", nicht: [] }                             // Kontrollfall: geht heute schon
+];
+const altVor165 = PREISDATEI.inhalt;
+try {
+  const echt = JSON.parse(fs.readFileSync("./preise.json", "utf8"));
+  if (!echt.artikel || echt.artikel.length < 10000) throw new Error("preise.json sieht nicht echt aus");
+  PREISDATEI.inhalt = echt; PREISDATEI.fail = false;
+  const { w } = makePhone(); await setup(w);
+  type(w, "#what", "butter");                                  // löst das Laden der Datei aus
+  await until(() => w.document.querySelector("[data-hit]"), "Preisdatei geladen", 25000);
+
+  const suche = (q) => JSON.parse(w.eval(
+    "JSON.stringify(pdSuche(" + JSON.stringify(q) + ", 3).map(function(t){"
+    + "return {name:t.name, cat:t.cat, store:(t.best&&t.best.store)||null};}))"));
+  const fehler = [];
+  for (const f of PRUEF) {
+    const top = suche(f.q);
+    if (!top.length) { fehler.push(f.q + ": keine Treffer"); continue; }
+    const erwartet = w.eval("guessCat(" + JSON.stringify(f.q) + ")");
+    for (const t of top) {
+      const n = t.name.toLowerCase();
+      const schlecht = f.nicht.find(x => n.includes(x));
+      if (schlecht) fehler.push(f.q + ": \"" + t.name + "\" (" + schlecht + ")");
+    }
+    // Mindestforderung: irgendetwas Passendes ist dabei. Hofer zählt immer mit,
+    // weil dort für keinen einzigen Artikel eine Warengruppe geliefert wird.
+    const passt = top.some(t => (erwartet !== "sonst" && t.cat === erwartet) || t.store === "Hofer"
+                             || (f.muss && t.name.toLowerCase().includes(f.muss)));
+    if (!passt) fehler.push(f.q + ": nichts Passendes unter den ersten drei – " + top.map(t=>t.name).join(" | "));
+  }
+  if (fehler.length) throw new Error(fehler.length + " Beanstandungen:\n     " + fehler.join("\n     "));
+  ok("Agent 165 – Prüfdatei: 10 Suchwörter gegen die echten " + echt.artikel.length.toLocaleString("de-AT") + " Artikel");
+} catch (e) { bad("Agent 165", e); }
+finally { PREISDATEI.inhalt = altVor165; PREISDATEI.fail = false; }
+
 console.log("\n================ TESTLAUF ================");
 results.forEach(r => console.log((r[0] === "PASS" ? "✅" : "❌") + "  " + r[1] + (r[2] ? "\n     → " + r[2] : "")));
 const fails = results.filter(r => r[0] === "FAIL").length;

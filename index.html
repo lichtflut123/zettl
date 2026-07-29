@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Zettl">
-<title>Zettl – ein Zettel für euch zwei</title>
+<title>Zettl – ein Zettel für alle</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231c1917'/%3E%3Ctext x='50' y='70' font-size='58' font-family='Georgia,serif' font-weight='bold' fill='%23fff' text-anchor='middle'%3EZ%3C/text%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231c1917'/%3E%3Ctext x='50' y='70' font-size='58' font-family='Georgia,serif' font-weight='bold' fill='%23fff' text-anchor='middle'%3EZ%3C/text%3E%3C/svg%3E">
 <style>
@@ -156,7 +156,7 @@ input{font:inherit;color:inherit}
    allein steht, und zog sie an den Verlauf darüber. */
 .summe > .basket + .basket{margin-top:-4px}
 /* Alternativen im Artikel-Dialog: eigener Scrollbereich, sonst wächst das Blatt endlos */
-.alts{max-height:44vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.alts{max-height:30vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .sheet{background:var(--card);border:1px solid var(--line);border-radius:24px;box-shadow:0 8px 30px rgba(0,0,0,.14);padding:16px;max-height:72vh;overflow-y:auto}
 .sheet .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
 .sheet .ttl{font-family:Georgia,serif;font-weight:700}
@@ -196,14 +196,14 @@ label.lbl{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:upp
 <div id="splash">
   <div class="sp-in">
     <div class="sp-name">Zettl<span>·</span></div>
-    <div class="sp-sub">Ein Zettel für euch zwei</div>
+    <div class="sp-sub">Ein Zettel für alle</div>
   </div>
 </div>
 <div id="app" class="wrap"></div>
 <script>
 "use strict";
 // =====================================================================
-// Zettl – ein Zettel für euch zwei
+// Zettl – ein Zettel für alle
 // Läuft komplett in dieser Datei. Daten liegen lokal im Browser und
 // (optional) verschlüsselt in eurer eigenen Supabase-Datenbank.
 // =====================================================================
@@ -1249,18 +1249,19 @@ const kgCo2 = (v) => (v >= 10 ? Math.round(v) : Math.round(v*10)/10).toString().
 
 // Vergleichbare Artikel finden – sortiert nach Preis pro Kilo, denn nur der
 // macht 250-g-Packung und 1-kg-Sack vergleichbar.
+let altGesamt = 0;      // wie viele es insgesamt waren, für die Überschrift
 function alternativen(item){
   if(!pdIndex || !pdIndex.length) return [];
   const rein = nameOhneGroesse(item.name);
   const eigenName = norm(rein);
   const eigen = grundpreis(item.price, item.size || itemMenge(item));
-  let roh = pdSuche(rein, 30);
+  let roh = pdSuche(rein, 15);
   // Bei wenigen Treffern breiter suchen: das Hauptwort genügt, sonst findet
   // "Bio Bergkäse" nur sich selbst und keinen anderen Bergkäse.
   if(roh.length < 3){
     const worte = norm(rein).split(" ").filter(w => w.length > 3);
     const kopf = worte[worte.length-1] || worte[0];
-    if(kopf && kopf !== norm(rein)) roh = pdSuche(kopf, 40);
+    if(kopf && kopf !== norm(rein)) roh = pdSuche(kopf, 15);
   }
   const liste = [];
   roh.forEach(h => {
@@ -1271,15 +1272,18 @@ function alternativen(item){
       spart: (eigen && g && eigen.je === g.je) ? eigen.wert - g.wert : null
     });
   });
-  liste.sort((a, b) => {
+  altGesamt = liste.length;
+  // Erst nach Relevanz kürzen, DANN nach Kilopreis sortieren. Vorher lief die
+  // Preissortierung über den ganzen Rohtopf – deshalb stand bei "Handseife
+  // Lavendel" der Allzweckreiniger auf Platz 1: billig, aber keine Seife.
+  const eng = liste.slice(0, 10);
+  eng.sort((a, b) => {
     if(a.gp != null && b.gp != null) return a.gp - b.gp;
     if(a.gp != null) return -1;
     if(b.gp != null) return 1;
     return a.h.best.price - b.h.best.price;
   });
-  // Früher 5 – zu wenig, um wirklich zu vergleichen. Die Liste bekommt im Dialog
-  // einen eigenen Scrollbereich (.alts), damit das Blatt nicht endlos wird.
-  return liste.slice(0, 20);
+  return eng.slice(0, 8);
 }
 
 // Genau dieses Produkt in den Händlerdaten – nützlich, solange der Artikel
@@ -1747,32 +1751,78 @@ const PD_SYN = {
   marille:["marille","aprikose"], karfiol:["karfiol","blumenkohl"],
   melanzani:["melanzani","aubergine"], germ:["germ","hefe"], kren:["kren","meerrettich"]
 };
+// Deutsche Komposita: das Grundwort steht hinten IM WORT und sagt, was die Sache ist.
+// "Vollmilch" ist Milch, "Milchschokolade" ist Schokolade. Deshalb wiegt ein Treffer
+// am Wortende schwer und einer am Wortanfang leicht. Die frühere Fassung hatte es
+// genau umgekehrt (4 Punkte fürs Wortende, 18 fürs Wortanfang) und belohnte mit
+// "Produkt steht meist hinten" zusätzlich die Wortstellung im Namen – also die
+// Geschmacksrichtung: "Toblerone Milch" schlug jede Vollmilch.
+const PD_W = {
+  EXAKT: 100,   // der Artikel heißt genau so
+  WORT:   80,   // eigenständiges Wort:            "S-BUDGET Butter"
+  KOPF:   72,   // Wortende, Grundwort:            "vollMILCH", "alpenBUTTER"
+  BEST:   16,   // Wortanfang, Bestimmungswort:    "MILCHschokolade"
+  MITTE:   5,   // mitten im Wort
+  POS:     8,   // hinten im Namen, nur noch ein schwacher Hinweis
+  ZEICHEN:30,   // Zeichenabdeckung – kurze, generische Namen bevorzugen
+  WORTE:  12,   // Wortabdeckung
+  BEI:     4, BEIMAX: 20,   // Abzug je überzähligem Beiwort
+  KAT:    40,   // Abzug bei fremder Warengruppe aus dem Datensatz
+  KAT2:   25    // Abzug, wenn der Name eine andere Warengruppe nahelegt
+};
 function pdSuche(q, max){
   if(!pdIndex || !pdIndex.length) return [];
   const roh = norm(q).split(" ").filter(Boolean);
   if(!roh.length) return [];
   const gruppen = roh.map(w => PD_SYN[w] ? PD_SYN[w].map(norm) : [w]);
+  const katQ = guessCat(q);
   const treffer = [];
   for(const e of pdIndex){
-    let s = 0, abdeckung = 0, ok = true;
+    const k = e.w.length;
+    let s = 0, abdeckung = 0, worte = 0, ok = true;
     for(const gruppe of gruppen){
-      let best = 0, len = 0;
+      let best = -1, len = 0;
       for(const w of gruppe){
-        if(e.n.indexOf(w) < 0) continue;
-        let p;
-        if(e.n === w) p = 60;
-        else if(e.w.indexOf(w) >= 0) p = 40;
-        else if(e.w.some(t => t.indexOf(w) === 0)) p = 18;
-        else p = 4;
-        if(e.w[e.w.length-1] === w) p += 20;          // Produkt steht meist hinten
-        else if(e.w[0] === w && e.w.length > 1) p += 2;
-        if(p > best){ best = p; len = w.length; }
+        if(e.n.indexOf(w) < 0) continue;               // Vorfilter wie bisher
+        if(e.n === w){
+          const p = PD_W.EXAKT + PD_W.POS;
+          if(p > best){ best = p; len = w.length; }
+          continue;
+        }
+        for(let i = 0; i < k; i++){
+          const t = e.w[i], j = t.indexOf(w);
+          if(j < 0) continue;
+          let art;
+          if(t === w) art = PD_W.WORT;
+          // Wortende zählt erst ab vier Zeichen als Grundwort, sonst hängt
+          // "eier" in "rostfreier" und "ei" in jedem "…rei"
+          else if(j + w.length === t.length) art = (w.length >= 4 ? PD_W.KOPF : PD_W.MITTE);
+          else if(j === 0) art = PD_W.BEST;
+          else art = PD_W.MITTE;
+          const p = art + Math.round(PD_W.POS * (k > 1 ? i/(k-1) : 1));
+          if(p > best){ best = p; len = w.length; }
+        }
       }
-      if(!best){ ok = false; break; }
-      s += best; abdeckung += len;
+      if(best < 0){ ok = false; break; }
+      s += best; abdeckung += len; worte++;
     }
     if(!ok) continue;
-    s += Math.round(35 * Math.min(1, abdeckung / Math.max(e.n.length, 1)));
+    s += Math.round(PD_W.ZEICHEN * Math.min(1, abdeckung / Math.max(e.n.length, 1)));
+    s += Math.round(PD_W.WORTE * Math.min(1, worte / Math.max(k, 1)));
+    s -= Math.min(PD_W.BEIMAX, PD_W.BEI * Math.max(0, k - worte - 1));
+    // Warengruppe: nur abwerten, nie belohnen. Hofer liefert für keinen einzigen
+    // Artikel eine – ein Bonus für die anderen würde den Diskonter bestrafen.
+    if(katQ !== "sonst"){
+      if(e.cat && e.cat !== katQ) s -= PD_W.KAT;
+      else {
+        // Zweite Meinung aus dem Namen. "Milka Schokoladen Milch" ist im Datensatz
+        // als Kühlregal geführt, ist aber Schokolade – dagegen hilft die Warengruppe
+        // nicht. Nur für Artikel gerechnet, die den Vorfilter passiert haben, und
+        // je Artikel nur einmal: über alle 51.000 wäre es zu teuer.
+        if(e.gcat === undefined) e.gcat = guessCat(e.name);
+        if(e.gcat !== "sonst" && e.gcat !== katQ) s -= PD_W.KAT2;
+      }
+    }
     if(e.offer) s += 6;
     // Was euch wichtig ist, kommt weiter nach oben
     if(S.pref.bio && e.bio) s += 25;
@@ -2025,7 +2075,7 @@ function viewLoading(){
 function viewWelcome(){
   return '<div class="center">'
    + '<div class="brand">Zettl<span>·</span></div>'
-   + '<div class="h1">Ein Zettel für euch zwei.</div>'
+   + '<div class="h1">Ein Zettel für alle.</div>'
    + '<div class="sub">Einkaufsliste und Haushalt, gemeinsam am Handy.</div>'
    + '<div class="stack" style="margin-top:28px">'
      + '<button class="btn" id="goNew">Neuen Haushalt anlegen</button>'
@@ -2067,7 +2117,7 @@ function wireConnect(){
 function viewSetup(){
   return '<div class="center">'
    + '<div class="brand">Zettl<span>·</span></div>'
-   + '<div class="h1">Ein Zettel für euch zwei.</div>'
+   + '<div class="h1">Ein Zettel für alle.</div>'
    + '<div class="sub">Einkaufsliste und Haushalt, gemeinsam am Handy. Jeder Eintrag zeigt, von wem er ist.</div>'
    + '<div class="stack" style="margin-top:28px">'
      + '<div class="field"><span class="dot amber" id="dotA"></span><input id="nameA" placeholder="Dein Name" maxlength="20"></div>'
@@ -2789,7 +2839,8 @@ function modalItem(){
          ? '<div class="muted" style="margin-top:14px">Suche Alternativen …</div>' : '';
        const eigen = grundpreisText(i.price, i.size || itemMenge(i));
        return '<div style="margin-top:16px"><label class="lbl">Alternativen'
-        + ' <span style="text-transform:none;letter-spacing:0">('+alts.length+')</span></label>'
+        + ' <span style="text-transform:none;letter-spacing:0">('
+        + (altGesamt > alts.length ? alts.length+' von '+altGesamt : alts.length)+')</span></label>'
         + '<div class="muted" style="margin-bottom:8px">Nach Preis pro Kilo sortiert'
           + (eigen ? ' – dieser Artikel liegt bei '+esc(eigen) : '')+'.</div>'
         + '<div class="alts">'

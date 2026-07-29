@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "zettl",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:\\Users\\offic\\AppData\\Local\\Temp\\claude\\D--zettl-app\\c90aeae9-bec7-4a15-97f8-7abc23d10b51\\scratchpad\\statisch.mjs"],
+      "port": 8123
+    }
+  ]
+}
