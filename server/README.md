@@ -137,14 +137,21 @@ Der heisse-preise-Datensatz enthält keine Bilder – die kommen von hier.
 node import-opendata.js https://dein-server $IMPORT_TOKEN --katalog=800
 ```
 
-### Täglich aktualisieren
+### Wöchentlich aktualisieren
 
 ```
-30 4 * * *  cd /pfad/zettl-server && node import-heissepreise.js https://dein-server $IMPORT_TOKEN >> import.log 2>&1
+30 4 * * 1  cd /pfad/zettl-server && node import-heissepreise.js https://dein-server $IMPORT_TOKEN >> import.log 2>&1
 0  5 * * 0  cd /pfad/zettl-server && node import-opendata.js    https://dein-server $IMPORT_TOKEN >> import.log 2>&1
 ```
 
-Einmal am Tag genügt – die Ketten aktualisieren nicht öfter.
+Einmal pro Woche. Das ist bewusst sparsamer als nötig: Die Ketten liefern durchaus täglich
+neue Stände, wir holen sie trotzdem nur wöchentlich. Der Preis dafür ist, dass eure Preise
+bis zu sieben Tage alt sein können. Der Gewinn ist deutlich weniger Last bei Projekten, die
+ihre Server aus eigener Tasche stemmen – und eine Position, die im Zweifel leichter zu
+vertreten ist.
+
+An `--tage` (Standard 45) ändert das nichts: Der Schalter misst das Alter der Daten *im
+Datensatz*, nicht euren Abrufrhythmus.
 
 ### Wie gut die Suche trifft
 
@@ -161,7 +168,7 @@ Butter-Apfeltasche. Eine Suche über 34.000 Produkte dauert unter 10 Millisekund
   weiterverkaufen solltet ihr sie nicht. Nennt das Projekt als Quelle.
 - **Open Food Facts / Open Prices**: Open Database License. Quelle nennen (die App tut
   das in der Trefferliste), Veränderungen wieder offen weitergeben.
-- Ladet die Datensätze höchstens einmal täglich – beide Projekte stemmen ihre Server
+- Ladet die Datensätze höchstens einmal pro Woche – beide Projekte stemmen ihre Server
   aus eigener Tasche.
 
 ## Selbst erfassen (für den privaten Gebrauch)
@@ -193,12 +200,12 @@ Preise von Händlerseiten abzurufen ist rechtlich nicht eindeutig geregelt. Die 
 selbst sind bloße Tatsachen und nicht urheberrechtlich geschützt; die Nutzungsbedingungen
 der Shops untersagen automatisierte Abrufe aber meist, und Datenbanken genießen in der EU
 einen eigenen Schutz gegen die Übernahme wesentlicher Teile. Für den eigenen Haushalt,
-ohne Weitergabe, mit einem Abruf pro Tag bewegt ihr euch in einer geduldeten Grauzone –
+ohne Weitergabe, mit einem Abruf pro Woche bewegt ihr euch in einer geduldeten Grauzone –
 verlassen könnt ihr euch darauf nicht.
 
 Praktische Regeln, die den Unterschied machen:
 
-- **Einmal am Tag genügt**, nachts, nie parallel. Ein Cron-Eintrag, kein Dauerlauf.
+- **Einmal pro Woche genügt**, nachts, nie parallel. Ein Cron-Eintrag, kein Dauerlauf.
 - **Nur für euch.** Der Server bleibt privat, `READ_TOKEN` setzen, nichts weiterverkaufen
   und nichts veröffentlichen.
 - **Ehrlich identifizieren** über einen eigenen User-Agent, nicht als Browser tarnen.
@@ -207,8 +214,9 @@ Praktische Regeln, die den Unterschied machen:
 - **Aufhören, wenn jemand fragt.** Kommt eine Aufforderung, ist die Sache erledigt.
 
 Wenn euch das zu heikel ist: Der fertige Datensatz von heisse-preise und Open Prices
-decken Billa und Spar tagesaktuell ab, und euer eigenes Preisgedächtnis in der App den
-Rest. Das reicht für die Frage, die euch wirklich interessiert – wo der Wocheneinkauf
+pflegen Billa und Spar tagesaktuell; weil wir nur wöchentlich abrufen, ist eure Kopie
+davon bis zu sieben Tage alt. Den Rest deckt euer eigenes Preisgedächtnis in der App.
+Das reicht für die Frage, die euch wirklich interessiert – wo der Wocheneinkauf
 günstiger ist.
 
 ## Eigenen Importer bauen

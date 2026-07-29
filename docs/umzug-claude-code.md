@@ -115,7 +115,7 @@ Start und weiß dann, worauf es ankommt:
 
 ## Aufbau
 - `index.html` – die ganze App in einer Datei, kein Build, kein Framework
-- `preise.json` – 52.000 Artikel mit Preisen, wird täglich neu erzeugt
+- `preise.json` – 52.000 Artikel mit Preisen, wird wöchentlich neu erzeugt
 - `test/agenten.mjs` – 156 Testagenten, die die App in jsdom durchklicken
 - `server/` – optionaler Preis-Server und die Importer
 
@@ -150,7 +150,7 @@ Einstiegsauftrag – bewusst klein, damit du siehst, wie es läuft:
 
 Wenn das sitzt, der eigentlich wichtige Auftrag:
 
-> Richte eine GitHub Action ein, die täglich um 4 Uhr früh
+> Richte eine GitHub Action ein, die wöchentlich montags um 4 Uhr früh
 > server/build-preisdatei.js ausführt und die erzeugte preise.json ins Repository
 > committet. Die Ketten Hofer und dm sollen über die Patches in patches/ frisch
 > abgerufen werden. Erkläre mir vorher, was du vorhast.
@@ -165,7 +165,7 @@ Zwei Wege, beide funktionieren mit dem Ordner, den du gerade hast:
 ziehen. Simpel, aber Handarbeit.
 
 **Besser:** Repository zu GitHub, Netlify damit verbinden. Dann veröffentlicht
-sich jede Änderung von selbst, und die tägliche Preisdatei landet automatisch auf
+sich jede Änderung von selbst, und die wöchentliche Preisdatei landet automatisch auf
 eurer Seite. Claude Code richtet dir das ein, wenn du es darum bittest.
 
 ---

@@ -30,7 +30,7 @@ läuft offline, funktioniert bei gesperrtem Speicher und im Funkloch.
 ## Offen – wichtig
 
 1. **Preisdatei aktualisiert sich nicht selbst.** Aktuell erzeugt Claude sie auf Zuruf
-   und ihr ladet sie hoch. Sauber wäre: GitHub Action oder Cron, die täglich
+   und ihr ladet sie hoch. Sauber wäre: GitHub Action oder Cron, die wöchentlich
    `build-preisdatei.js` ausführt und die Datei neben die App legt.
 2. **Datenvolumen prüfen.** Die App lädt `preise.json` (3,5 MB) beim ersten Tippen jeder
    Sitzung. Im WLAN egal, unterwegs womöglich nicht. Zu klären: Zwischenspeicherung über
@@ -114,8 +114,12 @@ als falsche. Wer die Lücke schließen will, braucht eine gepflegte Markenliste.
 Bei der Warengruppe geht es in die andere Richtung: rund 2.000 der 2.726 Abweichungen
 sind Artikel, die vorher **gar keine** Warengruppe hatten und jetzt eine bekommen.
 
-### Nächster Auftrag: tägliche Preisdatei
+### Nächster Auftrag: wöchentliche Preisdatei
 
-GitHub Action, die täglich um 4 Uhr `server/build-preisdatei.js` ausführt und die
-erzeugte `preise.json` ins Repository committet; Hofer und dm über die Patches in
+GitHub Action, die wöchentlich – montags um 4 Uhr – `server/build-preisdatei.js` ausführt
+und die erzeugte `preise.json` ins Repository committet; Hofer und dm über die Patches in
 `patches/` frisch abgerufen.
+
+Der Wochenrhythmus ist eine bewusste Festlegung vom 29. Juli 2026 und ersetzt die früher
+geplante tägliche Ausführung. Begründung und Folgen stehen in `server/README.md` unter
+„Wöchentlich aktualisieren".
