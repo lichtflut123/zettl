@@ -83,16 +83,39 @@ Wichtig hier: **Vor jeder Änderung committen, nach jeder Änderung Tests laufen
 Die Agenten haben in diesem Projekt zehn echte Fehler gefunden, darunter Datenverlust
 bei schnellen Eingaben – ohne sie wäre das erst euch im Supermarkt aufgefallen.
 
+### Preisdatei: die acht Felder
+
+`build-preisdatei.js` schrieb früher nur fünf Felder je Artikel. Die App liest acht –
+zusätzlich Bio, Regional und die Warengruppe. Das ist nachgezogen:
+
+- **Bio** kommt aus dem Datensatz (`item.bio`, bei Spar aus `biolevel`), ergänzt um den
+  Namen, wenn „Bio“ dort als eigenes Wort steht. Die Eigenmarken sind im Datensatz
+  lückenhaft gekennzeichnet.
+- **Warengruppe** kommt aus dem Kategoriecode des Datensatzes; die zehn Hauptgruppen von
+  heisse-preise werden auf die zwölf der App abgebildet. Fleisch & Wurst trennt die App
+  vom Kühlregal, der Datensatz nicht – dort entscheidet die Wortliste. Artikel ohne Code
+  werden über dieselbe Wortliste eingeordnet.
+- Die Wortliste wird zur Laufzeit aus `index.html` gelesen (`const CAT_WORDS`), damit
+  App und Preisdatei nicht auseinanderlaufen. Ändert sich dort der Aufbau, bricht der
+  Lauf mit einer klaren Meldung ab.
+- **Regional** steht in keinem Datensatz. Es wird am Namen erkannt: Bundesländer,
+  „aus Österreich“ und dergleichen.
+
+Gemessen an der Preisdatei vom 29. Juli 2026, über die 33.097 gemeinsamen Artikel von
+Billa und Spar: Bio stimmt zu 99,9 %, die Warengruppe zu 91,8 %, Regional zu 93,0 %.
+
+**Die eine echte Verschlechterung ist Regional.** Die alte Datei kannte 2.266 regionale
+Artikel mehr, weil sie offenbar eine Liste österreichischer Erzeuger benutzte, die
+nirgends im Ordner liegt. Ein Versuch, diese Liste zu erraten, hat die Übereinstimmung
+auf 90,9 % gedrückt – die Heuristik hat „regional“ bei Artikeln behauptet, die es selbst
+nicht behaupten. Deshalb bleibt es beim engen Namensabgleich: lieber weniger Kennzeichen
+als falsche. Wer die Lücke schließen will, braucht eine gepflegte Markenliste.
+
+Bei der Warengruppe geht es in die andere Richtung: rund 2.000 der 2.726 Abweichungen
+sind Artikel, die vorher **gar keine** Warengruppe hatten und jetzt eine bekommen.
+
 ### Nächster Auftrag: tägliche Preisdatei
 
-Geplant ist eine GitHub Action, die täglich um 4 Uhr `server/build-preisdatei.js`
-ausführt und die erzeugte `preise.json` ins Repository committet; Hofer und dm über die
-Patches in `patches/` frisch abgerufen.
-
-**Vorher zu klären:** `build-preisdatei.js` schreibt pro Artikel nur fünf Felder
-(`name, preis, laden, einheit, aktion`). Die App liest acht – zusätzlich `bio`,
-`regional` und die Warengruppe (siehe `index.html`, Funktion `ladePreisdatei`). Das
-Skript ist damit älter als die Preisdatei, die gerade neben der App liegt. Würde die
-Action so laufen, gingen Bio- und Regional-Kennzeichnung und die Warengruppen verloren.
-Wo diese drei Felder herkommen, steht in keinem Skript im Ordner – das ist zuerst zu
-rekonstruieren.
+GitHub Action, die täglich um 4 Uhr `server/build-preisdatei.js` ausführt und die
+erzeugte `preise.json` ins Repository committet; Hofer und dm über die Patches in
+`patches/` frisch abgerufen.
