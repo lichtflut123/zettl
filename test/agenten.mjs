@@ -3152,21 +3152,40 @@ try {
 // ================= KRITISCHE PRÜFUNG =================
 
 // ---------------- Agent 143: Alternativen dürfen keinen Unsinn vorschlagen
+// Vorher lief dieser Agent gegen die kleine Fixture, in der die Suche nach
+// "Clever Vollmilch" nur den Artikel selbst fand – der dann als namensgleich
+// aussortiert wurde. alts war LEER, und alts.some(...) ist über einem leeren
+// Array immer false: der Agent war grün, egal was die App vorschlug.
+const altVor143 = PREISDATEI.inhalt;
 try {
+  const viele = [];
+  for (let i = 0; i < 12; i++)
+    viele.push(["Marke" + i + " Vollmilch", 1.2 + i / 20, ["Billa","Spar","Hofer"][i%3], "1 l", 0, 0, 0, "kuehl"]);
+  viele.push(["Clever Vollmilch", 1.32, "Billa", "1 l", 0, 0, 0, "kuehl"]);          // der Artikel selbst
+  viele.push(["Clever Vollmilch", 0.99, "Hofer", "500 ml", 0, 0, 0, "kuehl"]);       // gleicher Name, andere Größe
+  viele.push(["Milka Vollmilch Schokolade", 1.49, "Billa", "100 g", 0, 0, 0, "suess"]); // Falle: heißt so, ist keine Milch
+  viele.push(["BI HOME Scheuermilch", 2.49, "Billa", "500 ml", 0, 0, 0, "haushalt"]);   // Falle: Putzmittel
+  PREISDATEI.inhalt = { stand: "2026-07-29", artikel: viele };
   PREISDATEI.fail = false;
   const { w } = makePhone(); await setup(w);
   await addItem(w, "Clever Vollmilch");
   openItem(w, "Vollmilch");
   await until(() => !w.__zettl.S.altBusy && w.__zettl.S.modal === "item", "Dialog fertig", 10000);
   const alts = [...w.document.querySelectorAll("[data-alt]")].map(b => b.textContent);
-  // Sich selbst darf die App nicht vorschlagen
+  // Ohne das hier prüft der Rest über ein leeres Array und ist wertlos
+  if (alts.length < 5) throw new Error("Nur " + alts.length + " Alternativen – der Agent prüft ins Leere");
+  // Sich selbst darf die App nicht vorschlagen, auch nicht in anderer Größe
   if (alts.some(a => a.includes("Clever Vollmilch"))) throw new Error("Namensgleiches Produkt als Alternative");
   if (!txt(w).includes("Genau dieses Produkt")) throw new Error("Passendes Produkt wird nicht angeboten");
-  // Und nichts völlig Fachfremdes
-  if (alts.some(a => a.includes("Toilettenpapier") || a.includes("Shampoo")))
-    throw new Error("Fachfremder Vorschlag: " + alts.join(" | "));
+  // Und nichts Fachfremdes: die Schokolade heißt zwar "Vollmilch", ist aber keine.
+  // Sie muss an der Relevanz scheitern, bevor nach Kilopreis sortiert wird.
+  if (alts.some(a => a.includes("Schokolade")))
+    throw new Error("Schokolade als Alternative zu Milch: " + alts.join(" | "));
+  if (alts.some(a => a.includes("Scheuermilch")))
+    throw new Error("Putzmittel als Alternative zu Milch: " + alts.join(" | "));
   ok("Agent 143 – Keine Selbstvorschläge, nichts Fachfremdes (" + alts.length + " Alternativen)");
 } catch (e) { bad("Agent 143", e); }
+finally { PREISDATEI.inhalt = altVor143; PREISDATEI.fail = false; }
 
 // ---------------- Agent 144: Artikel ohne Preis und ohne Größe
 try {
@@ -3367,8 +3386,8 @@ try {
 
 
 // ---------------- Agent 153: Mehr als sechs Treffer, mit Gesamtzahl
+const altInhalt = PREISDATEI.inhalt;
 try {
-  const altInhalt = PREISDATEI.inhalt;
   const viele = [];
   for (let i = 0; i < 120; i++)
     viele.push(["Bio Artikel " + i, 1 + i / 100, ["Billa", "Spar", "Hofer"][i % 3], "250 g", 0, 1, 0, "kuehl"]);
@@ -3390,9 +3409,11 @@ try {
   // Neue Eingabe -> wieder kurze Liste
   type(w, "#what", "bio a");
   await until(() => w.document.querySelectorAll("[data-hit]").length <= 20, "Zurück auf kurze Liste", 8000);
-  PREISDATEI.inhalt = altInhalt;
   ok("Agent 153 – 20 Treffer statt 6, Gesamtzahl sichtbar, 'mehr zeigen' liefert 60");
 } catch (e) { bad("Agent 153", e); }
+// Muss auch nach einem Fehlschlag zurück, sonst laufen alle folgenden Agenten
+// gegen die 120 erfundenen Bio-Artikel statt gegen die echte Fixture.
+finally { PREISDATEI.inhalt = altInhalt; PREISDATEI.fail = false; }
 
 // Hilfsdatum für die Verlaufs-Agenten
 const vorTagen = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
