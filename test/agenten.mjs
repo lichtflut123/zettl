@@ -513,6 +513,11 @@ try {
     ["  https://zettl-haushalt.supabase.co/rest/v1  ", "Leerzeichen + /rest/v1"]
   ];
   for (const [input, label] of variants) {
+    // Jede Schreibweise bekommt eine frische Datenbank: setup() legt jedes Mal
+    // einen neuen Haushalt mit neuem Salz an, und der Sync hält inzwischen an,
+    // wenn in der Datenbank ein fremder Tresor liegt. Ohne das Leeren prüfte der
+    // Agent, dass man einen bestehenden Haushalt überschreiben kann.
+    REMOTE.clear();
     const { w } = makePhone(); await setup(w);
     click(w, "#settings"); await sleep(80);
     clickText(w, "button", "Sync einrichten"); await sleep(120);

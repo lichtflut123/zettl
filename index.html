@@ -876,9 +876,25 @@ function apiBase(u){
   return s;
 }
 function syncOn(){ const c=syncCfg(); return !!(c && c.url && c.key); }
+// Ohne Zeitlimit legt eine einzige hängende Anfrage den ganzen Sync still: die
+// Wiedereintrittssperre gibt syncLaeuft erst im finally frei, und das läuft dann
+// nie. Vorher war eine hängende Anfrage ein verlorener Lauf, seit der Sperre wäre
+// sie ein toter Sync bis zum Neuladen der Seite.
+const NETZ_ZEIT = 15000;
+async function netz(url, opt){
+  const ac = (typeof AbortController !== "undefined") ? new AbortController() : null;
+  const t = ac ? setTimeout(() => ac.abort(), NETZ_ZEIT) : null;
+  try{
+    return await fetch(url, ac ? Object.assign({}, opt||{}, { signal: ac.signal }) : opt);
+  }catch(e){
+    throw (e && e.name === "AbortError")
+      ? new Error("Keine Antwort nach " + Math.round(NETZ_ZEIT/1000) + " Sekunden")
+      : e;
+  }finally{ if(t) clearTimeout(t); }
+}
 async function remoteGet(name){
   const c=syncCfg(); if(!c) return null;
-  const r = await fetch(apiBase(c.url)+"/rest/v1/zettl?id=eq."+encodeURIComponent(name)+"&select=data",
+  const r = await netz(apiBase(c.url)+"/rest/v1/zettl?id=eq."+encodeURIComponent(name)+"&select=data",
     { headers:{ apikey:c.key, Authorization:"Bearer "+c.key } });
   if(!r.ok) throw new Error("HTTP "+r.status);
   const rows = await r.json();
@@ -886,7 +902,7 @@ async function remoteGet(name){
 }
 async function remotePut(name, data){
   const c=syncCfg(); if(!c) return false;
-  const r = await fetch(apiBase(c.url)+"/rest/v1/zettl",
+  const r = await netz(apiBase(c.url)+"/rest/v1/zettl",
     { method:"POST",
       headers:{ apikey:c.key, Authorization:"Bearer "+c.key, "Content-Type":"application/json",
                 Prefer:"resolution=merge-duplicates,return=minimal" },
@@ -916,6 +932,15 @@ async function syncNow(silent){
     // Tresor zuerst: ohne ihn kann das andere Handy nichts entschlüsseln
     const rv = await remoteGet("vault");
     if(!rv && S.vault) await remotePut("vault", S.vault);
+    // Liegt in der Datenbank ein ANDERER Tresor, gehört sie zu einem anderen
+    // Passwort. Das passiert nach "Alles auf diesem Handy löschen" und Neuanlage:
+    // der alte Tresor bleibt liegen, die Daten würden aber mit dem neuen Schlüssel
+    // überschrieben. Danach kann kein Handy mehr etwas entschlüsseln, und beide
+    // löschen sich gegenseitig die Bestände – bei durchgehender Meldung "ok".
+    // Deshalb hier anhalten statt weiterzuschreiben.
+    else if(rv && S.vault && rv.salt && S.vault.salt && rv.salt !== S.vault.salt)
+      throw new Error("In der Datenbank liegt ein anderer Haushalt. Sync angehalten, damit nichts überschrieben wird. "
+        + "Entweder das ursprüngliche Passwort verwenden, oder unter ⚙ eine neue Datenbank eintragen.");
 
     for(const name of ["members","rooms","shopping","tasks","prices","plan","shops"]){
       if(S.key !== key0) throw new Error("Abgebrochen – der Haushalt wurde zwischendurch gesperrt.");
@@ -947,7 +972,11 @@ async function syncNow(silent){
       else if(name==="members") merged = (mine && mine.length===2) ? mine : (theirs||mine||[]);
       else merged = mergeItems(mine, theirs||[]);
 
-      await writeLocal(name, merged);
+      // Fehlschlag beim Schreiben sichtbar machen. Vorher lief der Sync weiter,
+      // lud den Stand hoch und meldete "ok", während lokal nichts angekommen war –
+      // bei vollem oder blockiertem Speicher lief das Handy still auseinander.
+      if(!(await writeLocal(name, merged)))
+        throw new Error("Konnte " + name + " nicht speichern – der Browser-Speicher ist voll oder blockiert.");
       if(name==="prices") S.prices=merged;
       else if(name==="plan") S.plan=merged;
       else if(name==="shops") S.shops=merged;
