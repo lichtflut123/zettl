@@ -3,7 +3,7 @@
 ## Aufbau
 - `index.html` – die ganze App in einer Datei, kein Build, kein Framework
 - `preise.json` – rund 52.000 Artikel mit Preisen, liegt neben der App und wird von ihr direkt gelesen
-- `test/agenten.mjs` – 156 Testagenten, die die App in jsdom durchklicken
+- `test/agenten.mjs` – 167 Testagenten, die die App in jsdom durchklicken
 - `server/` – optionaler Preis-Server und die Importer (eigene package.json, ohne Abhängigkeiten)
 - `patches/` – Reparaturen für die heisse-preise-Abrufer (Hofer, dm)
 - `docs/` – Übergabe, Befund zu den Abrufern, Umzugsanleitung

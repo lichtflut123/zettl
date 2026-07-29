@@ -60,6 +60,25 @@ input{font:inherit;color:inherit}
 .item{position:relative;display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 4px 12px 14px;margin-bottom:8px}
 .item .bar{position:absolute;left:0;top:10px;bottom:10px;width:4px;border-radius:0 4px 4px 0;background:var(--soft)}
 .item .bar.amber{background:var(--amber)} .item .bar.teal{background:var(--teal)}
+/* Warengruppe als Farbe am Strich – in der Marktreihenfolge von Obst bis Kassa.
+   Die Reihenfolge der Farben ist bewusst kontrastreich, nicht hübsch abgestuft:
+   nebeneinanderliegende Abteilungen sollen sich unterscheiden lassen. */
+.item .bar.k-obst{background:#16a34a}
+.item .bar.k-backwaren{background:#d97706}
+.item .bar.k-fleisch{background:#e11d48}
+.item .bar.k-kuehl{background:#0284c7}
+.item .bar.k-tiefkuehl{background:#06b6d4}
+.item .bar.k-vorrat{background:#a16207}
+.item .bar.k-suess{background:#db2777}
+.item .bar.k-getraenke{background:#4f46e5}
+.item .bar.k-haushalt{background:#64748b}
+.item .bar.k-drogerie{background:#9333ea}
+.item .bar.k-tierbedarf{background:#78350f}
+.item .bar.k-sonst{background:var(--soft)}
+/* Wer den Eintrag angelegt hat – klein vor dem Namen, seit die Farbe des Strichs
+   die Warengruppe zeigt */
+.wer{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:middle;background:var(--soft)}
+.wer.amber{background:var(--amber)} .wer.teal{background:var(--teal)}
 .box{width:24px;height:24px;border-radius:50%;border:2px solid #d6d3d1;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px}
 .box.on{background:var(--dark);border-color:var(--dark)}
 .grow{flex:1;min-width:0;text-align:left}
@@ -105,15 +124,16 @@ input{font:inherit;color:inherit}
 .badge.over{background:var(--rosebg);color:#be123c;border-color:#fecdd3}
 .dock{position:fixed;left:0;right:0;bottom:0;z-index:10}
 .dock .inner{max-width:520px;margin:0 auto;padding:0 12px calc(12px + env(safe-area-inset-bottom))}
-.bar-add{background:var(--card);border:1px solid var(--line);border-radius:24px;box-shadow:0 6px 24px rgba(0,0,0,.10);overflow:hidden}
+/* Spalte mit fester Eingabezeile: wird es eng, schrumpfen die Bereiche darüber.
+   Vorher standen 46vh Treffer und 38vh Chips nebeneinander im Budget von 86vh –
+   die Eingabezeile fiel unten aus der Leiste und war nicht mehr erreichbar. */
+.bar-add{background:var(--card);border:1px solid var(--line);border-radius:24px;box-shadow:0 6px 24px rgba(0,0,0,.10);overflow:hidden;display:flex;flex-direction:column;max-height:86vh}
 /* Trefferliste: scrollbar statt abgeschnitten */
-.hits{padding:10px 12px 4px;border-bottom:1px solid var(--line);max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.hits{padding:10px 12px 4px;border-bottom:1px solid var(--line);max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;flex:0 1 auto;min-height:0}
 .hits .item{margin-bottom:6px}
-.wieder{padding:10px 12px 2px;max-height:26vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
-.detail{padding:12px 14px 4px;border-bottom:1px solid var(--line);max-height:38vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
-/* Die ganze Leiste soll nie höher werden als der halbe Bildschirm plus Eingabe */
-.bar-add{max-height:86vh}
-.bar-add .line{display:flex;align-items:center;gap:8px;padding:8px}
+.detail{padding:12px 14px 4px;border-bottom:1px solid var(--line);max-height:38vh;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:0 1 auto;min-height:0}
+.bar-add .line{display:flex;align-items:center;gap:8px;padding:8px;flex:none}
+.barTop{display:flex;align-items:center;justify-content:space-between;padding:6px 8px 0 16px;flex:none}
 .bar-add input{flex:1;min-width:0;height:44px;border:0;outline:none;background:none;padding:0 8px;font-size:16px}
 .add{width:44px;height:44px;border-radius:14px;background:var(--dark);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;flex:none}
 .add.off{background:#e7e5e4;color:var(--soft)}
@@ -122,6 +142,11 @@ input{font:inherit;color:inherit}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{height:36px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--mut);font-size:14px;display:inline-flex;align-items:center;gap:6px}
 .chip.on{background:var(--dark);border-color:var(--dark);color:#fff}
+/* Zuletzt gekauft – sitzt unter den Artikeln, deshalb gedeckelt statt endlos */
+.zuletzt{margin:14px 0 4px;max-height:26vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.summe{margin-top:16px}
+/* Alternativen im Artikel-Dialog: eigener Scrollbereich, sonst wächst das Blatt endlos */
+.alts{max-height:44vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .sheet{background:var(--card);border:1px solid var(--line);border-radius:24px;box-shadow:0 8px 30px rgba(0,0,0,.14);padding:16px;max-height:72vh;overflow-y:auto}
 .sheet .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
 .sheet .ttl{font-family:Georgia,serif;font-weight:700}
@@ -1031,27 +1056,48 @@ async function noteBought(name){
   if(syncOn()) syncNow(true);
 }
 function daysBetween(a, b){ return Math.round((new Date(b+"T00:00:00") - new Date(a+"T00:00:00"))/86400000); }
-// Was ist erfahrungsgemäß wieder fällig?
-function dueAgain(){
-  const offen = visible(S.shopping).filter(i => !i.done).map(i => norm(i.name));
+// Zuletzt gekauft – die eine Vorschlagsliste. Früher gab es zwei: hier den Rhythmus
+// ("Wieder fällig", mindestens zwei Käufe) und nichts für alles Seltenere. Jetzt steht
+// alles Gekaufte drin, das Zuletzt zuerst, und der Rhythmus ist nur noch ein Vermerk.
+function zuletztGekauft(){
+  // Gegen ALLE Artikel filtern, die auf dem Zettel stehen – auch die abgehakten.
+  // Sonst schlägt die Liste vor, was gerade eben im Wagerl gelandet ist.
+  const drauf = visible(S.shopping).map(i => norm(i.name));
   const out = [];
   for(const key in S.prices){
     const e = normPriceEntry(S.prices[key]);
     const buys = (e && e.buys) || [];
-    if(buys.length < 2) continue;
-    if(offen.indexOf(key) >= 0) continue;
+    if(!buys.length) continue;
+    if(drauf.indexOf(key) >= 0) continue;
     const sorted = buys.slice().sort();
-    let sum = 0;
-    for(let i=1;i<sorted.length;i++) sum += daysBetween(sorted[i-1], sorted[i]);
-    const schnitt = Math.max(1, Math.round(sum/(sorted.length-1)));
     const her = daysBetween(sorted[sorted.length-1], today());
-    if(her >= Math.max(1, Math.round(schnitt*0.8))){
-      const name = (e.lastName || key);
-      out.push({ key, name, schnitt, her, quote: her/schnitt });
+    if(her > 90) continue;                    // älter als ein Vierteljahr: nicht mehr vorschlagen
+    // Rhythmus nur, wenn es mindestens zwei Käufe gibt – aus einem lässt sich keiner ablesen
+    let schnitt = null;
+    if(sorted.length >= 2){
+      let sum = 0;
+      for(let i=1;i<sorted.length;i++) sum += daysBetween(sorted[i-1], sorted[i]);
+      schnitt = Math.max(1, Math.round(sum/(sorted.length-1)));
     }
+    const faellig = schnitt != null && her >= Math.max(1, Math.round(schnitt*0.8));
+    out.push({ key, name: e.lastName || key, her, schnitt, faellig, at: e.updatedAt || 0 });
   }
-  out.sort((a,b) => b.quote - a.quote);
-  return out.slice(0, 6);
+  // Fälliges zuerst, sonst das Jüngste. buys kennt nur den Tag – bei mehreren
+  // Käufen am selben Tag entscheidet der Zeitstempel.
+  out.sort((a,b) => (b.faellig?1:0) - (a.faellig?1:0) || a.her - b.her || b.at - a.at);
+  return out.slice(0, 8);
+}
+
+// Bewusst schlicht: keine Warengruppen-Köpfe, keine Ladennamen, kein Einklappen.
+// Der Block sitzt mitten in der Liste, alles Zusätzliche macht sie unruhig.
+function zuletztBlock(){
+  const liste = zuletztGekauft();
+  if(!liste.length) return "";
+  return '<div class="zuletzt"><div class="muted" style="margin-bottom:6px">Zuletzt gekauft</div>'
+   + '<div class="chips">'
+   + liste.map(z => '<button class="chip" data-zuletzt="'+esc(z.key)+'">'
+       + catIcon(guessCat(z.name),15)+' '+esc(z.name)+'</button>').join("")
+   + '</div></div>';
 }
 
 // ---------------------------------------------------- CO2-Schätzung
@@ -1173,13 +1219,13 @@ function alternativen(item){
   const rein = nameOhneGroesse(item.name);
   const eigenName = norm(rein);
   const eigen = grundpreis(item.price, item.size || itemMenge(item));
-  let roh = pdSuche(rein, 14);
+  let roh = pdSuche(rein, 30);
   // Bei wenigen Treffern breiter suchen: das Hauptwort genügt, sonst findet
   // "Bio Bergkäse" nur sich selbst und keinen anderen Bergkäse.
   if(roh.length < 3){
     const worte = norm(rein).split(" ").filter(w => w.length > 3);
     const kopf = worte[worte.length-1] || worte[0];
-    if(kopf && kopf !== norm(rein)) roh = pdSuche(kopf, 16);
+    if(kopf && kopf !== norm(rein)) roh = pdSuche(kopf, 40);
   }
   const liste = [];
   roh.forEach(h => {
@@ -1196,7 +1242,9 @@ function alternativen(item){
     if(b.gp != null) return 1;
     return a.h.best.price - b.h.best.price;
   });
-  return liste.slice(0, 5);
+  // Früher 5 – zu wenig, um wirklich zu vergleichen. Die Liste bekommt im Dialog
+  // einen eigenen Scrollbereich (.alts), damit das Blatt nicht endlos wird.
+  return liste.slice(0, 20);
 }
 
 // Genau dieses Produkt in den Händlerdaten – nützlich, solange der Artikel
@@ -2045,7 +2093,7 @@ function viewMain(){
   const pill = syncPill();
   return '<div class="head">'
     + '<div class="row" style="justify-content:space-between">'
-      + '<div><div class="muted" style="font-family:Georgia,serif;font-weight:700">Zettl·</div>'
+      + '<div><div class="brand" style="line-height:1.1">Zettl<span>·</span></div>'
       + '<div class="who">' + S.members.map((m,i)=>(i?'<span class="amp">&</span>':'')+'<span class="dot '+m.color+'"></span>'+esc(m.name)).join("") + '</div></div>'
       + '<div class="icons">'
         + '<button class="icon" id="sync" aria-label="Aktualisieren">'+(S.syncState==="busy"?'<span class="spin">↻</span>':'↻')+'</button>'
@@ -2089,12 +2137,15 @@ function rowItem(i){
   } else if(best && best.price!=null && best.store){
     meta = '<span style="color:var(--teal)">günstigster: '+esc(best.store)+' '+esc(euro(best.price))+'</span>';
   }
+  const k = i.cat || guessCat(i.name);
+  // Der Strich links zeigt die Warengruppe, nicht mehr die Person – im Laden sucht
+  // man nach Abteilungen. Von wem der Eintrag ist, steht als Punkt vor dem Namen.
   return '<div class="item'+(i.done?" done":"")+'">'
-   + '<span class="bar '+(m?m.color:"")+'"></span>'
+   + '<span class="bar k-'+k+'"></span>'
    + '<button class="box'+(i.done?" on":"")+'" data-toggle="'+i.id+'" aria-label="Abhaken">'+(i.done?"✓":"")+'</button>'
-   + '<span style="color:var(--soft)">'+catIcon(i.cat||guessCat(i.name),20)+'</span>'
+   + '<span style="color:var(--soft)">'+catIcon(k,20)+'</span>'
    + '<button class="grow" data-item="'+i.id+'">'
-     + '<span class="name">'+esc(i.name)+'</span>'
+     + '<span class="name">'+(m?'<span class="wer '+m.color+'" title="'+esc(m.name)+'"></span>':'')+esc(i.name)+'</span>'
      + (meta ? '<span class="meta">'+meta+'</span>' : '')
    + '</button>'
    + '<button class="x" data-del="'+i.id+'" aria-label="Entfernen">✕</button></div>';
@@ -2138,9 +2189,12 @@ function co2Card(){
 }
 function listShopping(){
   const items = visible(S.shopping);
-  if(!items.length) return '<div class="empty"><b>Der Zettel ist leer.</b><span>Tipp unten ein, was ihr braucht – z. B. Milch.</span></div>';
+  if(!items.length) return '<div class="empty"><b>Der Zettel ist leer.</b><span>Tipp unten ein, was ihr braucht – z. B. Milch.</span></div>'
+    + zuletztBlock();
   const open = items.filter(i=>!i.done), done = items.filter(i=>i.done);
-  let h = basketCard() + co2Card();
+  // Reihenfolge: erst der Einkauf selbst, dann was er kostet. Der Sparen-Knopf
+  // bleibt oben – unter der ganzen Liste würde ihn niemand mehr finden.
+  let h = "";
   if(open.length >= 2){
     h += '<button class="btn" id="sparen" style="margin-bottom:12px">'
        + (S.sparBusy ? "Rechne …" : "💡 Günstigsten Einkauf berechnen") + '</button>';
@@ -2164,7 +2218,9 @@ function listShopping(){
                    extra:'<button class="link" id="clearDone">Leeren</button>' });
     if(!istZu("w:wagerl")) h += done.map(rowItem).join("");
   }
-  return h;
+  h += zuletztBlock();
+  const summe = basketCard() + co2Card();
+  return h + (summe ? '<div class="summe">'+summe+'</div>' : "");
 }
 // ---------------------------------------------------- Grundriss-Ansicht
 function planFloors(){
@@ -2326,23 +2382,14 @@ function listTasks(){
 function barShopping(){
   const d=S.draft;
   const typed = d.name.trim();
-  // Wenn nichts getippt wird: zeigen, was erfahrungsgemäß wieder dran ist
-  let wieder = "";
-  if(!typed){
-    const liste = dueAgain();
-    if(liste.length){
-      wieder = '<div class="wieder"><div class="muted" style="margin-bottom:6px">Wieder fällig</div>'
-        + '<div class="chips">'
-        + liste.map((s,i)=>'<button class="chip" data-again="'+i+'">'+catIcon(guessCat(s.name),15)+' '+esc(s.name)
-          + ' <span style="opacity:.6">'+(s.her===s.schnitt?"alle "+s.schnitt+" T.":"vor "+s.her+" T.")+'</span></button>').join("")
-        + '</div></div>';
-    }
-  }
+  // Früher standen hier die Chips "Wieder fällig". Die sind in die Liste unter den
+  // Artikeln gewandert ("Zuletzt gekauft") – zwei Vorschlagsreihen auf einem
+  // Handybildschirm zeigten überwiegend dieselben Namen.
   const best = typed.length>1 ? bestPrice(typed) : null;
   const cat = typed.length>1 ? (d.cat || guessCat(typed)) : null;
-  return '<div class="bar-add">'
-   + wieder
-   + (typed.length>=3 && S.prodHits && S.prodHitsQ===norm(typed) && S.prodHits.length
+  // Reihenfolge in der Leiste: Preis und Chips oben, die Treffer unmittelbar über
+  // dem Eingabefeld. Wer tippt, schaut aufs Feld – dort müssen die Vorschläge sein.
+  const treffer = (typed.length>=3 && S.prodHits && S.prodHitsQ===norm(typed) && S.prodHits.length
       ? '<div class="hits">'
         + '<div class="row" style="justify-content:space-between;margin-bottom:6px">'
           + '<span class="muted">'+(pdGesamt > S.prodHits.length
@@ -2368,15 +2415,22 @@ function barShopping(){
             + (p.offer ? '<span class="badge today">Aktion</span>' : '')
             + '</button>').join("")
         + '</div>'
-      : '')
-   + (best ? '<button id="useMem" style="display:block;width:100%;text-align:left;padding:10px 16px 0;font-size:12px;color:var(--mut)">'
-       + 'Günstigster bekannter Preis: <b>'+esc(euro(best.price))+'</b>'+(best.store?" bei "+esc(best.store):"")+' · <u>übernehmen</u></button>' : '')
-   + (typed.length>=2 ? '<div class="detail">'
+      : '');
+  const detail = typed.length>=2 ? '<div class="detail">'
        + '<div class="row"><input id="price" class="field" style="height:42px;width:150px" inputmode="decimal" placeholder="Preis, z. B. 1,29" value="'+esc(d.price)+'"><span class="muted">€ (optional)</span></div>'
        + '<div class="chips" style="margin:10px 0 0">'+activeStores().map(s=>'<button class="chip'+(d.store===s?" on":"")+'" data-store="'+esc(s)+'">'+esc(s)+'</button>').join("")+'</div>'
        + '<div class="chips" style="margin:10px 0 12px">'
            + CATS.map(c=>'<button class="chip'+(cat===c.k?" on":"")+'" data-cat="'+c.k+'">'+catIcon(c.k,15)+' '+esc(c.l)+'</button>').join("")
-       + '</div></div>' : '')
+       + '</div></div>' : '';
+  const merk = best ? '<button id="useMem" style="display:block;width:100%;text-align:left;padding:10px 16px 0;font-size:12px;color:var(--mut)">'
+       + 'Günstigster bekannter Preis: <b>'+esc(euro(best.price))+'</b>'+(best.store?" bei "+esc(best.store):"")+' · <u>übernehmen</u></button>' : '';
+  // Ist etwas aufgeklappt, braucht es einen Weg zurück. Ohne das kommt man nur
+  // heraus, indem man das Eingabefeld leert – das findet niemand.
+  const kopf = (detail || merk || treffer)
+    ? '<div class="barTop"><span class="muted">Vorschläge</span>'
+      + '<button class="x" id="closeBar" aria-label="Vorschläge schließen">✕</button></div>' : '';
+  return '<div class="bar-add">'
+   + kopf + detail + merk + treffer
    + '<div class="line">'
      + '<input id="what" placeholder="Was braucht ihr?" value="'+esc(d.name)+'">'
      + '<button class="add'+(d.name.trim()?"":" off")+'" id="addItem" aria-label="Hinzufügen">+</button>'
@@ -2542,14 +2596,16 @@ function modalPrices(){
     const b = bestPrice(i.name);
     const e = priceInfo(i.name);
     const stores = e ? Object.keys(e.byStore).sort((x,y)=>e.byStore[x].price-e.byStore[y].price) : [];
-    return '<div class="item" style="padding-left:14px">'
+    // Anklickbar wie in der Einkaufsliste – hier stand vorher ein toter <div>,
+    // man konnte also ausgerechnet dort keinen Preis nachtragen, wo es um Preise geht.
+    return '<button class="item" data-item="'+esc(i.id)+'" style="width:100%;padding-left:14px">'
      + '<span style="color:var(--soft)">'+catIcon(i.cat||guessCat(i.name),20)+'</span>'
-     + '<div class="grow"><span class="name">'+esc(i.name)+'</span>'
+     + '<span class="grow"><span class="name">'+esc(i.name)+'</span>'
      + '<span class="meta">'+(stores.length
          ? stores.map((s,ix)=>(ix?'':'<b>')+esc(s)+' '+esc(euro(e.byStore[s].price))+(ix?'':'</b>')).join(" · ")
-         : "noch kein Preis hinterlegt")+'</span></div>'
+         : "noch kein Preis hinterlegt")+'</span></span>'
      + (b&&b.price!=null ? '<span class="badge">'+esc(euro(b.price))+'</span>' : '')
-     + '</div>';
+     + '</button>';
   }).join("");
   return '<div class="modal" id="backdrop"><div class="sheet">'
    + '<div class="top"><span class="ttl">Preise</span><button class="x" id="closePrices">✕</button></div>'
@@ -2688,9 +2744,11 @@ function modalItem(){
        if(!alts.length) return S.altBusy
          ? '<div class="muted" style="margin-top:14px">Suche Alternativen …</div>' : '';
        const eigen = grundpreisText(i.price, i.size || itemMenge(i));
-       return '<div style="margin-top:16px"><label class="lbl">Alternativen</label>'
+       return '<div style="margin-top:16px"><label class="lbl">Alternativen'
+        + ' <span style="text-transform:none;letter-spacing:0">('+alts.length+')</span></label>'
         + '<div class="muted" style="margin-bottom:8px">Nach Preis pro Kilo sortiert'
           + (eigen ? ' – dieser Artikel liegt bei '+esc(eigen) : '')+'.</div>'
+        + '<div class="alts">'
         + alts.map((a, ix) => {
             const gp = grundpreisText(a.h.best.price, a.h.unit);
             return '<button class="item" data-alt="'+ix+'" style="width:100%;padding-left:14px">'
@@ -2706,7 +2764,7 @@ function modalItem(){
                   + esc(String(Math.round(a.spart*100)/100).replace(".",","))+' €/'+esc(a.je)+'</span>' : '')
              + '</button>';
           }).join("")
-        + '</div>';
+        + '</div></div>';
      })()
    + (known.length>1 ? '<div class="muted" style="margin-top:12px">Bekannte Preise: '
        + known.map(s=>esc(s)+" "+esc(euro(e.byStore[s].price))).join(" · ")+'</div>' : '')
@@ -2978,6 +3036,12 @@ function wireMain(){
 function wireShoppingBar(){
   const what=$("#what"), add=$("#addItem");
   if(!what) return;
+  const cb=$("#closeBar"); if(cb) cb.onclick = () => {
+    S.draft = { price:"", store:null, cat:null, showPrice:false, taskOpen:false, name:"", room:S.draft.room, rep:0, title:"" };
+    S.prodHits=null; S.prodHitsQ=null; S.mehrTreffer=false;
+    const f=$("#what"); if(f){ f.value=""; f.blur(); }
+    render();
+  };
   // Produktsuche beim Tippen, entspannt verzögert
   const startSuche = (q) => {
     if(q.length < 3){ if(S.prodHits){ S.prodHits=null; S.prodHitsQ=null; } return; }
@@ -3037,11 +3101,16 @@ function wireShoppingBar(){
     // Nur frische Preise ins Gedächtnis – sonst merkt sich die App Preise von 2023
     if(p.best && (!p.best.at || daysBetween(p.best.at, today()) < 60)) rememberPrice(name, p.best.price, p.best.store);
   });
-  document.querySelectorAll("[data-again]").forEach(b => b.onclick = async () => {
-    const liste = dueAgain();
-    const s = liste[parseInt(b.getAttribute("data-again"),10)];
-    if(!s) return;
-    await addProductsToList([s.name]);
+  // Zuletzt gekauft: der normalisierte Name steht im Attribut, nicht der Listenindex –
+  // sonst zeigt ein Tipp nach einem Sync dazwischen auf den falschen Artikel.
+  document.querySelectorAll("[data-zuletzt]").forEach(b => b.onclick = async () => {
+    if(b.disabled) return;
+    b.disabled = true;                                  // schützt vor dem zweiten Tipp
+    const key = b.getAttribute("data-zuletzt");
+    const e = normPriceEntry(S.prices[key]);
+    const name = (e && e.lastName) || key;
+    if(visible(S.shopping).some(i => norm(i.name) === key)) return;   // steht schon drauf
+    await addProductsToList([name]);
   });
   document.querySelectorAll("[data-cat]").forEach(b => b.onclick = () => {
     S.draft.cat = b.getAttribute("data-cat"); render(); });
@@ -3491,8 +3560,13 @@ function wireModal(){
   };
   const di=$("#doneItem"); if(di) di.onclick = async () => {
     const id=S.itemId; S.modal=null;
+    const it = S.shopping.find(x => x.id===id);
+    const wirdGekauft = it && !it.done;
     await updateItems("shopping", list => list.map(x => x.id===id
       ? Object.assign({}, x, {done:!x.done, updatedAt:now()}) : x));
+    // Genau wie das Häkchen in der Zeile: sonst zählt dieser Weg ins Wagerl nicht
+    // als Kauf und der Artikel fehlt später unter "Zuletzt gekauft".
+    if(wirdGekauft) noteBought(it.name);
   };
   const dli=$("#delItem"); if(dli) dli.onclick = async () => {
     const id=S.itemId; S.modal=null;

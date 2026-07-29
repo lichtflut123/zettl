@@ -230,8 +230,11 @@ try {
     .querySelector(".cnt");
   if (!wagerlZahl || wagerlZahl.textContent.trim() !== "1") throw new Error("Wagerl-Zähler falsch");
   click(w, "#clearDone"); await sleep(200);
-  if (txt(w).includes("Oliven")) throw new Error("Leeren hat nicht geleert");
-  if (!txt(w).includes("Eier")) throw new Error("Offenes verschwunden");
+  // Nicht über txt() prüfen: "Oliven" steht jetzt zu Recht unter "Zuletzt gekauft"
+  const nach = (await w.__zettl.readLocal("shopping", [])).filter(i => !i.deleted);
+  if (nach.some(i => i.name === "Oliven")) throw new Error("Leeren hat nicht geleert");
+  if (!nach.some(i => i.name === "Eier")) throw new Error("Offenes verschwunden");
+  if (!txt(w).includes("Eier")) throw new Error("Offenes nicht mehr sichtbar");
   ok("Agent 4 – Abhaken, Wagerl, Leeren");
 } catch (e) { bad("Agent 4", e); }
 
@@ -2391,16 +2394,22 @@ try {
   });
   await w.__zettl.boot(); await sleep(800);
   const t = txt(w);
-  if (!t.includes("Wieder fällig")) throw new Error("Keine Vorschlagsleiste");
-  if (!t.includes("Milch")) throw new Error("Milch wird nicht vorgeschlagen");
-  if (t.includes("Reis")) throw new Error("Reis ist zu früh dran");
+  if (!t.includes("Zuletzt gekauft")) throw new Error("Keine Vorschlagsliste");
+  if (!t.includes("Milch")) throw new Error("Milch fehlt im Verlauf");
+  // Reis ist nicht fällig, gehört aber in den Verlauf – genau das war vorher die Lücke
+  if (!t.includes("Reis")) throw new Error("Nicht Fälliges fehlt im Verlauf");
+  const chips = [...w.document.querySelectorAll("[data-zuletzt]")];
+  if (chips.length !== 2) throw new Error("Erwartet 2 Vorschläge, sind " + chips.length);
+  if (!chips[0].textContent.includes("Milch")) throw new Error("Fälliges steht nicht vorn: " + chips[0].textContent);
   // Antippen setzt ihn auf die Liste
-  [...w.document.querySelectorAll("[data-again]")][0].dispatchEvent(new w.Event("click", { bubbles: true }));
+  chips[0].dispatchEvent(new w.Event("click", { bubbles: true }));
   await sleep(700);
   const items = (await w.__zettl.readLocal("shopping", [])).filter(i => !i.deleted);
   if (!items.some(i => i.name === "Milch")) throw new Error("Vorschlag landet nicht auf der Liste");
-  if (txt(w).includes("Wieder fällig") && txt(w).match(/data-again/)) throw new Error("Vorschlag bleibt trotz Liste stehen");
-  ok("Agent 112 – Rhythmus erkannt: Milch fällig, Reis nicht, Antippen setzt sie auf die Liste");
+  if (items.filter(i => i.name === "Milch").length !== 1) throw new Error("Milch doppelt angelegt");
+  if ([...w.document.querySelectorAll("[data-zuletzt]")].some(b => b.textContent.includes("Milch")))
+    throw new Error("Vorschlag bleibt trotz Liste stehen");
+  ok("Agent 112 – Verlauf: Fälliges vorn, Seltenes bleibt drin, Antippen setzt es auf die Liste");
 } catch (e) { bad("Agent 112", e); }
 
 // ---------------- Agent 113: Wegkosten – zweiter Laden lohnt sich
@@ -2504,13 +2513,18 @@ try {
     "milch": { byStore: {}, lastName: "Milch", buys: [tage(12), tage(8), tage(4)], updatedAt: 1 }
   });
   await w.__zettl.boot(); await sleep(700);
-  if (!txt(w).includes("Wieder fällig")) throw new Error("Keine Vorschläge");
+  if (!txt(w).includes("Zuletzt gekauft")) throw new Error("Keine Vorschläge");
+  // Der Verlauf steht in der Liste, nicht im Dock – er darf beim Tippen bleiben
   type(w, "#what", "Brot"); await sleep(300);
-  if (txt(w).includes("Wieder fällig")) throw new Error("Vorschläge verdecken die Eingabe");
+  if (!txt(w).includes("Zuletzt gekauft")) throw new Error("Verlauf verschwindet beim Tippen");
   if ($(w, "#what").value !== "Brot") throw new Error("Eingabe verloren");
-  click(w, "#addItem"); await sleep(500);
-  if (!txt(w).includes("Wieder fällig")) throw new Error("Vorschläge kommen nach dem Eintragen nicht zurück");
-  ok("Agent 118 – Vorschlagsleiste weicht beim Tippen und kommt danach zurück");
+  // Was sich aufklappt, muss sich auch schließen lassen
+  if (!$(w, "#closeBar")) throw new Error("Kein Schließen-Knopf an der aufgeklappten Leiste");
+  click(w, "#closeBar"); await sleep(350);
+  if ($(w, "#what").value !== "") throw new Error("Schließen räumt die Eingabe nicht weg");
+  if ($(w, "#closeBar")) throw new Error("Leiste bleibt aufgeklappt");
+  if (!txt(w).includes("Zuletzt gekauft")) throw new Error("Verlauf nach dem Schließen weg");
+  ok("Agent 118 – Verlauf bleibt beim Tippen stehen, die Leiste lässt sich schließen");
 } catch (e) { bad("Agent 118", e); }
 
 
@@ -2933,7 +2947,8 @@ try {
   PREISDATEI.fail = false;
   const { w } = makePhone(); await setup(w);
   const css = w.document.querySelector("style").textContent;
-  for (const [regel, was] of [[".hits{", "Trefferliste"], [".detail{", "Preisfeld"], [".wieder{", "Wieder-fällig-Leiste"]]) {
+  for (const [regel, was] of [[".hits{", "Trefferliste"], [".detail{", "Preisfeld"],
+                              [".zuletzt{", "Zuletzt-gekauft-Liste"], [".alts{", "Alternativenliste"]]) {
     const i = css.indexOf(regel);
     if (i < 0) throw new Error("Keine Regel für " + was);
     const block = css.slice(i, css.indexOf("}", i));
@@ -2950,7 +2965,21 @@ try {
   // Und die Liste darunter darf nicht verdeckt werden
   const liste = w.document.querySelector(".list");
   if (!liste.style.paddingBottom) throw new Error("Kein Platz für die untere Leiste reserviert");
-  ok("Agent 135 – Trefferliste, Preisfeld und Vorschläge sind scrollbar, Liste bleibt frei");
+  // Die Eingabezeile darf nie aus der Leiste gedrängt werden. Vorher passten
+  // 46vh Treffer und 38vh Preisfeld nicht in 86vh, overflow:hidden schnitt sie ab.
+  const iBar = css.indexOf(".bar-add{");
+  const barCss = css.slice(iBar, css.indexOf("}", iBar));
+  if (!barCss.includes("flex-direction:column"))
+    throw new Error("Leiste ist keine Spalte – die Eingabezeile kann herausfallen");
+  const iLine = css.indexOf(".bar-add .line{");
+  if (!css.slice(iLine, css.indexOf("}", iLine)).includes("flex:none"))
+    throw new Error("Eingabezeile darf nicht schrumpfen dürfen");
+  for (const [regel, was] of [[".hits{", "Trefferliste"], [".detail{", "Preisfeld"]]) {
+    const i = css.indexOf(regel);
+    if (!css.slice(i, css.indexOf("}", i)).includes("min-height:0"))
+      throw new Error(was + " kann nicht schrumpfen – Eingabezeile wird verdrängt");
+  }
+  ok("Agent 135 – Trefferliste, Preisfeld und Vorschläge scrollbar, Eingabezeile bleibt stehen");
 } catch (e) { bad("Agent 135", e); }
 
 
@@ -3364,6 +3393,191 @@ try {
   PREISDATEI.inhalt = altInhalt;
   ok("Agent 153 – 20 Treffer statt 6, Gesamtzahl sichtbar, 'mehr zeigen' liefert 60");
 } catch (e) { bad("Agent 153", e); }
+
+// Hilfsdatum für die Verlaufs-Agenten
+const vorTagen = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+
+// ---------------- Agent 154: Leerer Zettel zeigt den Verlauf – dort nützt er am meisten
+try {
+  const { w } = makePhone(); await setup(w);
+  await w.__zettl.writeLocal("prices", {
+    "klopapier": { byStore: {}, lastName: "Klopapier", buys: [vorTagen(6)], updatedAt: 1 }
+  });
+  await w.__zettl.boot(); await sleep(800);
+  const t = txt(w);
+  if (!t.includes("Der Zettel ist leer")) throw new Error("Leer-Zustand fehlt");
+  if (!t.includes("Zuletzt gekauft")) throw new Error("Verlauf fehlt auf dem leeren Zettel");
+  if (!t.includes("Klopapier")) throw new Error("Gekaufter Artikel fehlt");
+  ok("Agent 154 – Auf dem leeren Zettel steht der Verlauf");
+} catch (e) { bad("Agent 154", e); }
+
+// ---------------- Agent 155: Obergrenze acht, jüngstes zuerst
+try {
+  const { w } = makePhone(); await setup(w);
+  const p = {};
+  for (let i = 0; i < 14; i++) p["ware" + i] = { byStore: {}, lastName: "Ware " + i, buys: [vorTagen(i + 1)], updatedAt: 1 };
+  await w.__zettl.writeLocal("prices", p);
+  await w.__zettl.boot(); await sleep(800);
+  const chips = [...w.document.querySelectorAll("[data-zuletzt]")];
+  if (chips.length !== 8) throw new Error("Erwartet 8 Vorschläge, sind " + chips.length);
+  if (!chips[0].textContent.includes("Ware 0")) throw new Error("Jüngstes steht nicht vorn: " + chips[0].textContent);
+  if (!chips[7].textContent.includes("Ware 7")) throw new Error("Reihenfolge stimmt nicht: " + chips[7].textContent);
+  const namen = chips.map(b => b.textContent.trim());
+  if (new Set(namen).size !== namen.length) throw new Error("Doppelte Einträge im Verlauf");
+  ok("Agent 155 – Verlauf auf acht begrenzt, jüngster Kauf zuerst, keine Doppelten");
+} catch (e) { bad("Agent 155", e); }
+
+// ---------------- Agent 156: Was auf dem Zettel steht, wird nicht vorgeschlagen
+try {
+  const { w } = makePhone(); await setup(w);
+  await w.__zettl.writeLocal("prices", {
+    "milch":  { byStore: {}, lastName: "Milch",  buys: [vorTagen(3)], updatedAt: 1 },
+    "butter": { byStore: {}, lastName: "Butter", buys: [vorTagen(4)], updatedAt: 1 },
+    "salz":   { byStore: {}, lastName: "Salz",   buys: [vorTagen(5)], updatedAt: 1 }
+  });
+  await w.__zettl.boot(); await sleep(700);
+  await addItem(w, "Milch");                       // offen auf dem Zettel
+  await addItem(w, "Butter");
+  [...w.document.querySelectorAll("[data-toggle]")].find(b => b.closest(".item").textContent.includes("Butter"))
+    .dispatchEvent(new w.Event("click", { bubbles: true })); await sleep(400);   // Butter ins Wagerl
+  const namen = [...w.document.querySelectorAll("[data-zuletzt]")].map(b => b.textContent);
+  if (namen.some(n => n.includes("Milch"))) throw new Error("Offener Artikel wird trotzdem vorgeschlagen");
+  if (namen.some(n => n.includes("Butter"))) throw new Error("Artikel im Wagerl wird trotzdem vorgeschlagen");
+  if (!namen.some(n => n.includes("Salz"))) throw new Error("Salz fehlt im Verlauf");
+  ok("Agent 156 – Weder Offenes noch Abgehaktes taucht im Verlauf auf");
+} catch (e) { bad("Agent 156", e); }
+
+// ---------------- Agent 157: Zweimal schnell antippen legt nur einen Artikel an
+try {
+  const { w } = makePhone(); await setup(w);
+  await w.__zettl.writeLocal("prices", {
+    "kaffee": { byStore: {}, lastName: "Kaffee", buys: [vorTagen(2)], updatedAt: 1 }
+  });
+  await w.__zettl.boot(); await sleep(700);
+  const chip = w.document.querySelector("[data-zuletzt]");
+  if (!chip) throw new Error("Kein Vorschlag da");
+  chip.dispatchEvent(new w.Event("click", { bubbles: true }));
+  chip.dispatchEvent(new w.Event("click", { bubbles: true }));   // sofort noch einmal
+  await sleep(900);
+  const items = (await w.__zettl.readLocal("shopping", [])).filter(i => !i.deleted && i.name === "Kaffee");
+  if (items.length !== 1) throw new Error("Erwartet 1 Kaffee, sind " + items.length);
+  ok("Agent 157 – Doppeltes Antippen legt den Artikel nur einmal an");
+} catch (e) { bad("Agent 157", e); }
+
+// ---------------- Agent 158: Uralte Käufe verstopfen den Verlauf nicht
+try {
+  const { w } = makePhone(); await setup(w);
+  await w.__zettl.writeLocal("prices", {
+    "faschingskrapfen": { byStore: {}, lastName: "Faschingskrapfen", buys: [vorTagen(200)], updatedAt: 1 },
+    "mehl":             { byStore: {}, lastName: "Mehl",             buys: [vorTagen(10)],  updatedAt: 1 }
+  });
+  await w.__zettl.boot(); await sleep(700);
+  const namen = [...w.document.querySelectorAll("[data-zuletzt]")].map(b => b.textContent);
+  if (namen.some(n => n.includes("Faschingskrapfen"))) throw new Error("200 Tage alter Kauf wird noch vorgeschlagen");
+  if (!namen.some(n => n.includes("Mehl"))) throw new Error("Frischer Kauf fehlt");
+  ok("Agent 158 – Käufe älter als ein Vierteljahr fallen aus dem Verlauf");
+} catch (e) { bad("Agent 158", e); }
+
+// ---------------- Agent 159: "Ins Wagerl" im Dialog zählt als Kauf
+try {
+  const { w } = makePhone(); await setup(w);
+  await addItem(w, "Zahnpasta"); await sleep(300);
+  openItem(w, "Zahnpasta"); await sleep(500);
+  if (!$(w, "#doneItem")) throw new Error("Artikel-Dialog nicht offen");
+  click(w, "#doneItem"); await sleep(800);
+  const prices = await w.__zettl.readLocal("prices", {});
+  const e = prices["zahnpasta"];
+  if (!e || !e.buys || !e.buys.length) throw new Error("Der Weg über den Dialog zählt nicht als Kauf");
+  ok("Agent 159 – Auch 'Ins Wagerl' im Dialog landet in der Kaufhistorie");
+} catch (e) { bad("Agent 159", e); }
+
+// ---------------- Agent 160: Im Preise-Dialog lassen sich die Artikel anklicken
+try {
+  const { w } = makePhone(); await setup(w);
+  await w.__zettl.writeLocal("prices", {
+    "reis": { byStore: { "Billa": { price: 1.99 } }, last: { price: 1.99, store: "Billa" }, lastName: "Reis", updatedAt: 1 }
+  });
+  await w.__zettl.boot(); await sleep(600);
+  await addItem(w, "Reis"); await sleep(400);
+  click(w, "#priceHelp"); await sleep(500);
+  const zeile = [...w.document.querySelectorAll(".sheet [data-item]")].find(b => b.textContent.includes("Reis"));
+  if (!zeile) throw new Error("Artikelzeile im Preise-Dialog ist nicht anklickbar");
+  zeile.dispatchEvent(new w.Event("click", { bubbles: true })); await sleep(600);
+  if (!$(w, "#saveItem")) throw new Error("Antippen öffnet den Artikel-Dialog nicht");
+  ok("Agent 160 – Artikel im Preise-Dialog öffnen den Artikel-Dialog");
+} catch (e) { bad("Agent 160", e); }
+
+// ---------------- Agent 161: Mehr als fünf Alternativen, in einem scrollbaren Bereich
+try {
+  const alt = PREISDATEI.inhalt;
+  const viele = [];
+  for (let i = 0; i < 12; i++)
+    viele.push(["Bergkäse Sorte " + i, 5 + i / 2, ["Billa", "Spar", "Hofer"][i % 3], (200 + i * 50) + " g", 0, 0, 0, "kuehl"]);
+  PREISDATEI.inhalt = { stand: "2026-07-29", artikel: viele };
+  PREISDATEI.fail = false;
+  const { w } = makePhone(); await setup(w);
+  await addItem(w, "Bergkäse"); await sleep(400);
+  openItem(w, "Bergkäse");
+  await until(() => w.document.querySelector(".alts"), "Alternativen", 12000);
+  const n = w.document.querySelectorAll(".alts [data-alt]").length;
+  if (n <= 5) throw new Error("Immer noch nur " + n + " Alternativen");
+  const css = w.document.querySelector("style").textContent;
+  const i = css.indexOf(".alts{");
+  if (!css.slice(i, css.indexOf("}", i)).includes("overflow-y:auto")) throw new Error("Alternativen nicht scrollbar");
+  PREISDATEI.inhalt = alt;
+  ok("Agent 161 – " + n + " Alternativen statt fünf, in einem eigenen Scrollbereich");
+} catch (e) { bad("Agent 161", e); }
+
+// ---------------- Agent 162: Reihenfolge im Einkaufen-Tab
+try {
+  const { w } = makePhone(); await setup(w);
+  await w.__zettl.writeLocal("prices", {
+    "milch": { byStore: { "Billa": { price: 1.32 } }, last: { price: 1.32, store: "Billa" }, lastName: "Milch", updatedAt: 1 },
+    "brot":  { byStore: { "Billa": { price: 2.49 } }, last: { price: 2.49, store: "Billa" }, lastName: "Brot",  updatedAt: 1 }
+  });
+  await w.__zettl.boot(); await sleep(600);
+  await addItem(w, "Milch"); await addItem(w, "Brot"); await sleep(500);
+  const h = w.document.querySelector(".list").innerHTML;
+  const iSparen = h.indexOf('id="sparen"'), iItem = h.indexOf("data-toggle"),
+        iKosten = h.indexOf('id="priceHelp"'), iCo2 = h.indexOf('id="co2Help"');
+  if (iSparen < 0) throw new Error("Sparen-Knopf fehlt");
+  if (iItem < 0) throw new Error("Keine Artikel gerendert");
+  if (iKosten < 0) throw new Error("Kostenkarte fehlt");
+  if (!(iSparen < iItem)) throw new Error("Sparen-Knopf steht nicht oben");
+  if (!(iItem < iKosten)) throw new Error("Artikel stehen nicht vor der Zusammenfassung");
+  if (iCo2 >= 0 && !(iKosten < iCo2)) throw new Error("Klimabilanz steht nicht nach der Zusammenfassung");
+  ok("Agent 162 – Reihenfolge: Sparen, Artikel, Zusammenfassung, Klima");
+} catch (e) { bad("Agent 162", e); }
+
+// ---------------- Agent 163: Farbstrich zeigt die Warengruppe, Punkt die Person
+try {
+  const { w } = makePhone(); await setup(w);
+  await addItem(w, "Bananen"); await addItem(w, "Klopapier"); await sleep(500);
+  const balken = [...w.document.querySelectorAll(".item .bar")];
+  if (balken.length < 2) throw new Error("Zu wenige Artikelzeilen");
+  const klassen = balken.map(b => (String(b.className).match(/k-[a-z]+/) || [""])[0]);
+  if (klassen.some(k => !k)) throw new Error("Ein Strich trägt keine Warengruppen-Farbe: " + klassen.join(","));
+  if (klassen[0] === klassen[1]) throw new Error("Obst und Drogerie bekommen dieselbe Farbe: " + klassen[0]);
+  const css = w.document.querySelector("style").textContent;
+  for (const k of klassen)
+    if (css.indexOf(".item .bar." + k + "{") < 0) throw new Error("Keine Farbregel für " + k);
+  if (!w.document.querySelector(".item .name .wer")) throw new Error("Personenpunkt fehlt am Artikel");
+  ok("Agent 163 – Warengruppe färbt den Strich, die Person steht als Punkt davor");
+} catch (e) { bad("Agent 163", e); }
+
+// ---------------- Agent 164: Verlauf übersteht den Neustart
+try {
+  const { w } = makePhone(); await setup(w);
+  await addItem(w, "Senf"); await sleep(300);
+  [...w.document.querySelectorAll("[data-toggle]")][0].dispatchEvent(new w.Event("click", { bubbles: true }));
+  await sleep(400);
+  click(w, "#clearDone"); await sleep(500);
+  const gespeichert = dump(w);
+  const { w: w2 } = makePhone(gespeichert); await sleep(900);
+  if (!txt(w2).includes("Senf")) throw new Error("Verlauf ist nach dem Neustart weg");
+  if (!txt(w2).includes("Zuletzt gekauft")) throw new Error("Verlaufsblock fehlt nach dem Neustart");
+  ok("Agent 164 – Der Verlauf überlebt den Neustart der App");
+} catch (e) { bad("Agent 164", e); }
 
 console.log("\n================ TESTLAUF ================");
 results.forEach(r => console.log((r[0] === "PASS" ? "✅" : "❌") + "  " + r[1] + (r[2] ? "\n     → " + r[2] : "")));
