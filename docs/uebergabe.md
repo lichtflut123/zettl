@@ -6,13 +6,13 @@ Stand: 29. Juli 2026. Alles Folgende ist getestet, sofern nicht anders vermerkt.
 
 | Datei | Zweck |
 |---|---|
-| `zettl.html` | Die ganze App, eine Datei, 184 KB |
-| `preise.json` | 52.253 Artikel mit Preisen, 3,5 MB |
-| `test-agenten.mjs` | 137 Testagenten, die die App im Browser durchklicken |
-| `zettl-server/` | Optionaler Preis-Server samt Importern |
-| `hofer-fetcher-fix.patch` | Reparatur für heisse-preise (Hofer) |
-| `dm-fetcher-fix.patch` | Reparatur für heisse-preise (dm) |
-| `befund-abrufer.md` | Untersuchung, welche Ketten warum stillstehen |
+| `index.html` | Die ganze App, eine Datei, 195 KB |
+| `preise.json` | 52.253 Artikel mit Preisen, 4,0 MB |
+| `test/agenten.mjs` | 156 Testagenten, die die App im Browser durchklicken |
+| `server/` | Optionaler Preis-Server samt Importern |
+| `patches/hofer-fetcher-fix.patch` | Reparatur für heisse-preise (Hofer) |
+| `patches/dm-fetcher-fix.patch` | Reparatur für heisse-preise (dm) |
+| `docs/befund-abrufer.md` | Untersuchung, welche Ketten warum stillstehen |
 
 ## Was fertig ist
 
@@ -64,40 +64,35 @@ läuft offline, funktioniert bei gesperrtem Speicher und im Funkloch.
 
 ## Weiterarbeiten in Claude Code
 
-Ab hier lohnt der Umstieg deutlich. Gründe: Git-Historie für eine 184-KB-Datei, die
-komplette Testsuite in einem Lauf, Deployment per Befehl statt Datei-Hochladen, und
-mehrere Dateien gleichzeitig.
-
-Vorschlag für den Aufbau:
-
-```
-zettl/
-├── index.html            (aus zettl.html)
-├── preise.json
-├── test/agenten.mjs      (aus test-agenten.mjs, Pfad zur App anpassen)
-├── server/               (aus zettl-server/)
-├── patches/              (die beiden .patch-Dateien)
-└── docs/befund-abrufer.md
-```
-
-Erste Schritte dort:
+Der Umzug ist erledigt: Das Projekt liegt als Git-Repository in `D:\zettl_app`, in der
+oben beschriebenen Struktur. Die Testsuite läuft in einem Stück durch.
 
 ```bash
-mkdir zettl && cd zettl && git init
-# Dateien hineinkopieren, dann:
-npm install jsdom          # nur für die Tests
-node test/agenten.mjs      # muss 137/137 melden
-git add -A && git commit -m "Stand aus dem Chat"
+npm test                   # node test/agenten.mjs, meldet 156/156, dauert Minuten
 ```
 
-Ein guter erster Auftrag an Claude Code:
+Zwei Dinge, die beim Umzug angepasst wurden:
 
-> Hier ist Zettl, eine Haushalts-App als einzelne HTML-Datei, mit einer Testsuite aus
-> 137 Agenten in test/agenten.mjs. Lies zuerst docs/uebergabe.md. Richte dann eine
-> GitHub Action ein, die täglich um 4 Uhr server/build-preisdatei.js ausführt und die
-> erzeugte preise.json ins Repository committet. Lass danach die Testsuite laufen.
+- Der Pfad zur App in `test/agenten.mjs` zeigt jetzt auf `./index.html`; der Test muss
+  deshalb aus dem Projektstamm laufen.
+- jsdom 26 stellt `TextEncoder`/`TextDecoder` im Fenster nicht bereit. Beide werden in
+  `beforeParse` nachgereicht, so wie dort schon `crypto` und `fetch`. Ohne das startet
+  die App in der Testumgebung überhaupt nicht – im echten Browser ist alles in Ordnung.
 
-Wichtig für dort: **Vor jeder Änderung committen, nach jeder Änderung Tests laufen
-lassen.** Die Agenten haben in diesem Projekt acht echte Fehler gefunden, darunter
-Datenverlust bei schnellen Eingaben – ohne sie wäre das erst euch im Supermarkt
-aufgefallen.
+Wichtig hier: **Vor jeder Änderung committen, nach jeder Änderung Tests laufen lassen.**
+Die Agenten haben in diesem Projekt zehn echte Fehler gefunden, darunter Datenverlust
+bei schnellen Eingaben – ohne sie wäre das erst euch im Supermarkt aufgefallen.
+
+### Nächster Auftrag: tägliche Preisdatei
+
+Geplant ist eine GitHub Action, die täglich um 4 Uhr `server/build-preisdatei.js`
+ausführt und die erzeugte `preise.json` ins Repository committet; Hofer und dm über die
+Patches in `patches/` frisch abgerufen.
+
+**Vorher zu klären:** `build-preisdatei.js` schreibt pro Artikel nur fünf Felder
+(`name, preis, laden, einheit, aktion`). Die App liest acht – zusätzlich `bio`,
+`regional` und die Warengruppe (siehe `index.html`, Funktion `ladePreisdatei`). Das
+Skript ist damit älter als die Preisdatei, die gerade neben der App liegt. Würde die
+Action so laufen, gingen Bio- und Regional-Kennzeichnung und die Warengruppen verloren.
+Wo diese drei Felder herkommen, steht in keinem Skript im Ordner – das ist zuerst zu
+rekonstruieren.

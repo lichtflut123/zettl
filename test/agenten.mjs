@@ -123,6 +123,7 @@ function makePhone(storage = {}, url = "https://zettl.test/") {
     runScripts: "dangerously", url, pretendToBeVisual: true,
     beforeParse(w) {
       Object.defineProperty(w, "crypto", { value: webcrypto, configurable: true });
+      w.TextEncoder = TextEncoder; w.TextDecoder = TextDecoder;   // jsdom liefert beides nicht mit
       w.fetch = fakeFetch;
       w.navigator.geolocation = {
         getCurrentPosition: (ok, err) => GEO.deny
@@ -1929,6 +1930,7 @@ try {
   const dom = new JSDOM(HTML, { runScripts: "dangerously", url: "https://zettl.test/", pretendToBeVisual: true,
     beforeParse(w) {
       Object.defineProperty(w, "crypto", { value: webcrypto, configurable: true });
+      w.TextEncoder = TextEncoder; w.TextDecoder = TextDecoder;   // jsdom liefert beides nicht mit
       w.fetch = fakeFetch;
       w.Storage.prototype.getItem = function () { throw new Error("SecurityError"); };
       w.Storage.prototype.setItem = function () { throw new Error("SecurityError"); };
