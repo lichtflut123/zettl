@@ -5,7 +5,7 @@
   "description": "Zettl – Haushalts- und Einkaufs-App für zwei Personen",
   "type": "module",
   "scripts": {
-    "test": "node test/agenten.mjs"
+    "test": "node test/agenten.mjs",`n    "schnell": "node test/schnell.mjs"
   },
   "engines": {
     "node": ">=20"

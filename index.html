@@ -793,13 +793,25 @@ function withLock(fn){
   return p;
 }
 
+// Verschlüsselt gespeichertes ohne Schlüssel zu lesen ergibt die Rücklage – also
+// eine leere Liste. Wer damit weiterrechnet, hält Leeres für den echten Stand.
+// Deshalb sagt der zweite Rückgabewert, ob wirklich gelesen werden konnte.
 async function readLocal(name, fb){
   const raw = lsGet(LS[name], null);
   if(raw==null) return fb;
   if(raw && raw.__enc){ const p = await decJson(S.key, raw); return p==null?fb:p; }
   return raw;
 }
+function lesbar(name){
+  const raw = lsGet(LS[name], null);
+  return !(raw && raw.__enc && !S.key);
+}
 async function writeLocal(name, value){
+  // Nie Klartext schreiben, wenn der Haushalt verschlüsselt ist. Fällt der
+  // Schlüssel mitten in einem Lauf weg – Sperren oder Zurücksetzen während eines
+  // Syncs –, landeten sonst Namen und Listen unverschlüsselt im Speicher und in
+  // der Datenbank, und zwar mit leerem Inhalt: doppelter Schaden.
+  if(!S.key && S.vault) return false;
   const payload = S.key ? await encJson(S.key, value) : value;
   return lsSet(LS[name], payload);
 }
@@ -893,6 +905,12 @@ async function syncNow(silent){
   if(!syncOn()){ S.syncState="off"; if(!silent) render(); return; }
   if(syncLaeuft){ syncNochmal = true; return; }
   syncLaeuft = true;
+  // Der Schlüssel zum Startzeitpunkt. Sperren und Zurücksetzen setzen S.key
+  // mitten in die Schleife auf null; danach kann sie weder Fremdes entschlüsseln
+  // noch Eigenes lesen, mischt Leeres mit Leerem und schreibt das Ergebnis über
+  // den echten Stand – lokal und in der Datenbank. Deshalb wird vor jedem
+  // Datensatz geprüft, ob noch derselbe Schlüssel gilt.
+  const key0 = S.key;
   S.syncState="busy"; S.syncMsg=null; if(!silent) render();
   try{
     // Tresor zuerst: ohne ihn kann das andere Handy nichts entschlüsseln
@@ -900,6 +918,7 @@ async function syncNow(silent){
     if(!rv && S.vault) await remotePut("vault", S.vault);
 
     for(const name of ["members","rooms","shopping","tasks","prices","plan","shops"]){
+      if(S.key !== key0) throw new Error("Abgebrochen – der Haushalt wurde zwischendurch gesperrt.");
       let theirsRaw = await remoteGet(name);          // Netzwerk außerhalb der Sperre
       let theirs = null;
       if(theirsRaw && theirsRaw.__enc) theirs = await decJson(S.key, theirsRaw);
@@ -938,6 +957,8 @@ async function syncNow(silent){
       else S.tasks=merged;
       });
 
+      // Letzte Sicherung vor dem Netz: lieber nichts hochladen als Klartext oder Leeres
+      if(S.key !== key0) throw new Error("Abgebrochen – der Haushalt wurde zwischendurch gesperrt.");
       await remotePut(name, S.key ? await encJson(S.key, merged) : merged);
     }
     S.syncState="ok"; S.err=null;
@@ -1343,6 +1364,10 @@ function alternativen(item){
   roh.forEach(h => {
     if(norm(h.name) === eigenName) return;   // gleicher Name ist keine Alternative
     const g = grundpreis(h.best.price, h.unit);
+    // Nur vergleichen, was dieselbe Einheit hat. Sonst stehen Waffeln und
+    // Butterkekse als Alternative zu einem Liter Milch da, weil ihr €/kg
+    // kleiner ist als der €/l der Milch.
+    if(eigen && (!g || g.je !== eigen.je)) return;
     liste.push({
       h, gp: g ? g.wert : null, je: g ? g.je : null,
       spart: (eigen && g && eigen.je === g.je) ? eigen.wert - g.wert : null
