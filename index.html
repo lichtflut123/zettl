@@ -61,20 +61,23 @@ input{font:inherit;color:inherit}
 .item .bar{position:absolute;left:0;top:10px;bottom:10px;width:4px;border-radius:0 4px 4px 0;background:var(--soft)}
 .item .bar.amber{background:var(--amber)} .item .bar.teal{background:var(--teal)}
 /* Warengruppe als Farbe am Strich – in der Marktreihenfolge von Obst bis Kassa.
-   Die Reihenfolge der Farben ist bewusst kontrastreich, nicht hübsch abgestuft:
-   nebeneinanderliegende Abteilungen sollen sich unterscheiden lassen. */
+   Die Farbe ist der zweite Hinweis, nicht der erste: das Symbol in derselben Zeile
+   trägt die Bedeutung, denn zwölf Farben auf vier Pixel Breite lassen sich nicht
+   zuverlässig unterscheiden. Benachbarte Abteilungen sind zusätzlich in der
+   Helligkeit getrennt, damit sie auch bei Rot-Grün-Blindheit auseinanderfallen –
+   Brot und Fleisch waren als Orange und Rot dort nicht unterscheidbar. */
 .item .bar.k-obst{background:#16a34a}
-.item .bar.k-backwaren{background:#d97706}
+.item .bar.k-backwaren{background:#92400e}
 .item .bar.k-fleisch{background:#e11d48}
 .item .bar.k-kuehl{background:#0284c7}
-.item .bar.k-tiefkuehl{background:#06b6d4}
+.item .bar.k-tiefkuehl{background:#0891b2}
 .item .bar.k-vorrat{background:#a16207}
 .item .bar.k-suess{background:#db2777}
 .item .bar.k-getraenke{background:#4f46e5}
 .item .bar.k-haushalt{background:#64748b}
 .item .bar.k-drogerie{background:#9333ea}
 .item .bar.k-tierbedarf{background:#78350f}
-.item .bar.k-sonst{background:var(--soft)}
+.item .bar.k-sonst{background:var(--mut)}
 /* Wer den Eintrag angelegt hat – klein vor dem Namen, seit die Farbe des Strichs
    die Warengruppe zeigt */
 .wer{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:middle;background:var(--soft)}
@@ -144,7 +147,14 @@ input{font:inherit;color:inherit}
 .chip.on{background:var(--dark);border-color:var(--dark);color:#fff}
 /* Zuletzt gekauft – sitzt unter den Artikeln, deshalb gedeckelt statt endlos */
 .zuletzt{margin:14px 0 4px;max-height:26vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+/* Auf dem leeren Zettel steht darüber die zentrierte Leermeldung – da braucht der
+   Wechsel auf linksbündige Chips mehr Luft als die 14px zwischen zwei Listenteilen */
+.empty + .zuletzt{margin-top:32px}
 .summe{margin-top:16px}
+/* Die Klimakarte rückt an die Kostenkarte heran – aber nur, wenn es eine gibt.
+   Als inline-Stil an der Karte selbst wirkte der Ausgleich auch dann, wenn sie
+   allein steht, und zog sie an den Verlauf darüber. */
+.summe > .basket + .basket{margin-top:-4px}
 /* Alternativen im Artikel-Dialog: eigener Scrollbereich, sonst wächst das Blatt endlos */
 .alts{max-height:44vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .sheet{background:var(--card);border:1px solid var(--line);border-radius:24px;box-shadow:0 8px 30px rgba(0,0,0,.14);padding:16px;max-height:72vh;overflow-y:auto}
@@ -256,14 +266,18 @@ const CAT_WORDS = [
 // Tiefkühl landen (wegen "eis") und "Zahnpasta" im Vorrat (wegen "pasta").
 // Erst in den Händlerdaten nachsehen, dann erst raten – dort steht die
 // Warengruppe schwarz auf weiß, unsere Wortliste ist nur die Notlösung.
+// Warengruppen aus der Preisdatei sind Fremddaten – deren Adresse ist ein freies
+// Eingabefeld. Ein unbekannter Schlüssel würde sonst als Klassenname im Markup landen
+// und den Artikel aus der nach Abteilungen sortierten Liste verschwinden lassen.
+function katOk(k){ return CATS.some(c => c.k === k) ? k : null; }
 function katFuer(name){
   if(pdIndex && pdIndex.length){
     name = nameOhneGroesse(name);
     const n = norm(name);
-    const exakt = pdIndex.find(e => e.cat && e.n === n);
-    if(exakt) return exakt.cat;
-    const treffer = pdSuche(name, 3).filter(t => t.cat);
-    if(treffer.length && norm(treffer[0].name).indexOf(n) >= 0) return treffer[0].cat;
+    const exakt = pdIndex.find(e => katOk(e.cat) && e.n === n);
+    if(exakt) return katOk(exakt.cat);
+    const treffer = pdSuche(name, 3).filter(t => katOk(t.cat));
+    if(treffer.length && norm(treffer[0].name).indexOf(n) >= 0) return katOk(treffer[0].cat);
   }
   return guessCat(name);
 }
@@ -1059,6 +1073,10 @@ function daysBetween(a, b){ return Math.round((new Date(b+"T00:00:00") - new Dat
 // Zuletzt gekauft – die eine Vorschlagsliste. Früher gab es zwei: hier den Rhythmus
 // ("Wieder fällig", mindestens zwei Käufe) und nichts für alles Seltenere. Jetzt steht
 // alles Gekaufte drin, das Zuletzt zuerst, und der Rhythmus ist nur noch ein Vermerk.
+// Was gerade auf die Liste wandert. Muss ausserhalb des DOM stehen: render() wirft
+// die Knöpfe weg, ein disabled am Knopf überlebt das nicht – und dann legt der
+// zweite Tipp denselben Artikel ein zweites Mal an.
+const zuletztBusy = new Set();
 function zuletztGekauft(){
   // Gegen ALLE Artikel filtern, die auf dem Zettel stehen – auch die abgehakten.
   // Sonst schlägt die Liste vor, was gerade eben im Wagerl gelandet ist.
@@ -1066,37 +1084,54 @@ function zuletztGekauft(){
   const out = [];
   for(const key in S.prices){
     const e = normPriceEntry(S.prices[key]);
-    const buys = (e && e.buys) || [];
+    // buys kommt per Sync herein und ist damit Fremddatum – nur Datumsstrings zählen
+    const buys = (e && Array.isArray(e.buys)) ? e.buys.filter(d => typeof d === "string" && d) : [];
     if(!buys.length) continue;
-    if(drauf.indexOf(key) >= 0) continue;
+    if(drauf.indexOf(key) >= 0 || zuletztBusy.has(key)) continue;
     const sorted = buys.slice().sort();
     const her = daysBetween(sorted[sorted.length-1], today());
-    if(her > 90) continue;                    // älter als ein Vierteljahr: nicht mehr vorschlagen
-    // Rhythmus nur, wenn es mindestens zwei Käufe gibt – aus einem lässt sich keiner ablesen
+    if(!Number.isFinite(her)) continue;       // kaputtes Datum: lieber gar nicht anzeigen
+    // Rhythmus erst ab zwei Käufen – und ein Abstand von einem Tag ist keiner,
+    // sonst gilt ein an zwei Folgetagen Gekauftes für immer als fällig.
     let schnitt = null;
     if(sorted.length >= 2){
       let sum = 0;
       for(let i=1;i<sorted.length;i++) sum += daysBetween(sorted[i-1], sorted[i]);
-      schnitt = Math.max(1, Math.round(sum/(sorted.length-1)));
+      if(Number.isFinite(sum)) schnitt = Math.max(1, Math.round(sum/(sorted.length-1)));
     }
-    const faellig = schnitt != null && her >= Math.max(1, Math.round(schnitt*0.8));
-    out.push({ key, name: e.lastName || key, her, schnitt, faellig, at: e.updatedAt || 0 });
+    const faellig = schnitt != null && schnitt >= 2 && her >= Math.round(schnitt*0.8);
+    // Fälliges bleibt stehen, auch wenn sein Rhythmus länger ist als das Fenster –
+    // sonst verschwindet gerade das, woran man sich am schlechtesten erinnert.
+    if(her > 90 && !faellig) continue;
+    out.push({ key, name: e.lastName || key, her, schnitt, faellig,
+               quote: schnitt ? her/schnitt : 0, at: e.updatedAt || 0 });
   }
-  // Fälliges zuerst, sonst das Jüngste. buys kennt nur den Tag – bei mehreren
-  // Käufen am selben Tag entscheidet der Zeitstempel.
-  out.sort((a,b) => (b.faellig?1:0) - (a.faellig?1:0) || a.her - b.her || b.at - a.at);
+  // Fälliges zuerst, darin das am längsten Überfällige. Sonst das Jüngste; buys kennt
+  // nur den Tag, bei Gleichstand entscheidet der Zeitstempel des Eintrags.
+  out.sort((a,b) => (b.faellig?1:0) - (a.faellig?1:0) || b.quote - a.quote
+                 || a.her - b.her || b.at - a.at);
   return out.slice(0, 8);
+}
+function zuletztWann(z){
+  if(z.faellig) return "fällig";
+  if(z.her <= 0) return "heute";
+  if(z.her === 1) return "gestern";
+  return "vor " + z.her + " T.";
 }
 
 // Bewusst schlicht: keine Warengruppen-Köpfe, keine Ladennamen, kein Einklappen.
 // Der Block sitzt mitten in der Liste, alles Zusätzliche macht sie unruhig.
+// try/catch, weil der Block im Aufbau von viewMain() steckt: eine Ausnahme über
+// fremde Sync-Daten würde sonst die ganze Oberfläche einfrieren lassen.
 function zuletztBlock(){
-  const liste = zuletztGekauft();
+  let liste;
+  try { liste = zuletztGekauft(); } catch(e){ return ""; }
   if(!liste.length) return "";
   return '<div class="zuletzt"><div class="muted" style="margin-bottom:6px">Zuletzt gekauft</div>'
    + '<div class="chips">'
    + liste.map(z => '<button class="chip" data-zuletzt="'+esc(z.key)+'">'
-       + catIcon(guessCat(z.name),15)+' '+esc(z.name)+'</button>').join("")
+       + catIcon(katFuer(z.name),15)+' '+esc(z.name)
+       + ' <span style="opacity:.6">'+esc(zuletztWann(z))+'</span></button>').join("")
    + '</div></div>';
 }
 
@@ -1675,7 +1710,8 @@ async function ladePreisdatei(){
     const map = new Map();
     for(const a of (d.artikel || [])){
       const name = a[0], preis = a[1], laden = a[2], einheit = a[3], aktion = !!a[4];
-      const bio = !!a[5], regional = !!a[6], kat = a[7] || null;
+      // Fremddaten: nur bekannte Warengruppen übernehmen, siehe katOk()
+      const bio = !!a[5], regional = !!a[6], kat = katOk(a[7]);
       const key = norm(name) + "|" + (einheit || "");
       let e = map.get(key);
       if(!e){
@@ -1920,7 +1956,13 @@ const memberById = (id) => S.members.find(m=>m.id===id) || null;
 // wenn sich daran etwas ändert – sonst springt einem die Liste unter dem Finger weg.
 function viewSig(){
   const sum = (a) => (a||[]).reduce((x,i)=>x+(i.updatedAt||0)+(i.done?1:0)+(i.doneAt?2:0),0);
+  // Das Kaufgedächtnis muss mit hinein: "Zuletzt gekauft", die Kostenkarte und die
+  // Preis-Zusätze an den Zeilen leben davon. Ein Sync, der nur Preise bringt, hat
+  // sonst keinen Ausweis und zeichnet nicht neu. Und today(), weil die Fälligkeit
+  // am Datum hängt – sonst steht bei über Mitternacht offener App der Stand von gestern.
+  const preise = (p) => { let n=0, u=0; for(const k in (p||{})){ n++; u += (p[k] && p[k].updatedAt) || 0; } return n+":"+u; };
   return [S.phase, S.tab, S.modal, S.floor, S.syncState, S.err, S.toast, S.sortByStore, S.draft.cat,
+    preise(S.prices), today(),
     Object.keys(S.zu).filter(k=>S.zu[k]).join(","),
     S.taskId, Object.keys(S.prodSel).filter(k=>S.prodSel[k]).join(","),
     S.planFloor, S.planEdit, S.planRoom, (S.shops.list||[]).length, S.shopBusy, S.shopErr,
@@ -2137,7 +2179,7 @@ function rowItem(i){
   } else if(best && best.price!=null && best.store){
     meta = '<span style="color:var(--teal)">günstigster: '+esc(best.store)+' '+esc(euro(best.price))+'</span>';
   }
-  const k = i.cat || guessCat(i.name);
+  const k = katOk(i.cat) || guessCat(i.name);
   // Der Strich links zeigt die Warengruppe, nicht mehr die Person – im Laden sucht
   // man nach Abteilungen. Von wem der Eintrag ist, steht als Punkt vor dem Namen.
   return '<div class="item'+(i.done?" done":"")+'">'
@@ -2179,7 +2221,7 @@ function co2Card(){
   const b = co2Bilanz();
   if(!b.gezaehlt) return "";
   const top = b.posten[0];
-  return '<div class="basket" style="margin-top:-4px">'
+  return '<div class="basket">'
    + '<div class="row" style="justify-content:space-between">'
      + '<span>≈ <b>'+esc(kgCo2(b.summe))+'</b> CO₂ <span style="color:var(--soft)">für '+b.gezaehlt+' von '+b.gesamt+' Artikeln</span></span>'
      + '<button class="link" id="co2Help">Details</button>'
@@ -2203,7 +2245,9 @@ function listShopping(){
   if(S.sortByStore){
     // Nach Warengruppen in Marktreihenfolge – so wie man durch den Laden geht
     const byCat = {};
-    open.forEach(i => { const c=i.cat||guessCat(i.name); (byCat[c]=byCat[c]||[]).push(i); });
+    // katOk, damit ein Artikel mit unbekannter Warengruppe nicht aus der Liste fällt:
+    // order kennt nur die Schlüssel aus CATS, alles andere hätte keinen Abschnitt
+    open.forEach(i => { const c=katOk(i.cat)||guessCat(i.name); (byCat[c]=byCat[c]||[]).push(i); });
     const order = CATS.map(c=>c.k).filter(k=>byCat[k]);
     h += order.map(k =>
       secHead({ key:"w:"+k, icon:catIcon(k,16), name:catLabel(k), anzahl:byCat[k].length })
@@ -3104,13 +3148,15 @@ function wireShoppingBar(){
   // Zuletzt gekauft: der normalisierte Name steht im Attribut, nicht der Listenindex –
   // sonst zeigt ein Tipp nach einem Sync dazwischen auf den falschen Artikel.
   document.querySelectorAll("[data-zuletzt]").forEach(b => b.onclick = async () => {
-    if(b.disabled) return;
-    b.disabled = true;                                  // schützt vor dem zweiten Tipp
     const key = b.getAttribute("data-zuletzt");
+    // Erst prüfen, dann sperren – sonst bleibt der Knopf bei einem frühen Ausstieg tot
+    if(zuletztBusy.has(key)) return;
+    if(visible(S.shopping).some(i => norm(i.name) === key)) return;   // steht schon drauf
     const e = normPriceEntry(S.prices[key]);
     const name = (e && e.lastName) || key;
-    if(visible(S.shopping).some(i => norm(i.name) === key)) return;   // steht schon drauf
-    await addProductsToList([name]);
+    zuletztBusy.add(key);
+    try { await addProductsToList([name]); }
+    finally { zuletztBusy.delete(key); render(); }
   });
   document.querySelectorAll("[data-cat]").forEach(b => b.onclick = () => {
     S.draft.cat = b.getAttribute("data-cat"); render(); });
@@ -3559,14 +3605,20 @@ function wireModal(){
     toast(name+" gespeichert");
   };
   const di=$("#doneItem"); if(di) di.onclick = async () => {
+    if(di.dataset.busy) return;
+    di.dataset.busy = "1";
     const id=S.itemId; S.modal=null;
-    const it = S.shopping.find(x => x.id===id);
-    const wirdGekauft = it && !it.done;
-    await updateItems("shopping", list => list.map(x => x.id===id
-      ? Object.assign({}, x, {done:!x.done, updatedAt:now()}) : x));
+    // Namen und Richtung unter der Sperre bestimmen, nicht aus einem alten Schnappschuss:
+    // zwischen Klick und Schreiben kann ein Sync den Artikel umbenannt oder gelöscht haben.
+    let gekauft = null;
+    await updateItems("shopping", list => list.map(x => {
+      if(x.id!==id || x.deleted) return x;
+      if(!x.done) gekauft = x.name;
+      return Object.assign({}, x, {done:!x.done, updatedAt:now()});
+    }));
     // Genau wie das Häkchen in der Zeile: sonst zählt dieser Weg ins Wagerl nicht
     // als Kauf und der Artikel fehlt später unter "Zuletzt gekauft".
-    if(wirdGekauft) noteBought(it.name);
+    if(gekauft) await noteBought(gekauft);
   };
   const dli=$("#delItem"); if(dli) dli.onclick = async () => {
     const id=S.itemId; S.modal=null;

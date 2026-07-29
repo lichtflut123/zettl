@@ -3407,8 +3407,17 @@ try {
   const t = txt(w);
   if (!t.includes("Der Zettel ist leer")) throw new Error("Leer-Zustand fehlt");
   if (!t.includes("Zuletzt gekauft")) throw new Error("Verlauf fehlt auf dem leeren Zettel");
-  if (!t.includes("Klopapier")) throw new Error("Gekaufter Artikel fehlt");
-  ok("Agent 154 – Auf dem leeren Zettel steht der Verlauf");
+  // Nicht nur "steht irgendwo im Text": genau ein Chip, richtiger Schlüssel, im Block
+  const chips = [...w.document.querySelectorAll("[data-zuletzt]")];
+  if (chips.length !== 1) throw new Error("Erwartet 1 Vorschlag, sind " + chips.length);
+  if (chips[0].getAttribute("data-zuletzt") !== "klopapier") throw new Error("Falscher Schlüssel am Chip");
+  if (!chips[0].textContent.includes("Klopapier")) throw new Error("Chip trägt den Namen nicht");
+  if (!chips[0].closest(".zuletzt")) throw new Error("Chip sitzt nicht im Verlaufsblock");
+  // und er muss auch etwas tun
+  chips[0].dispatchEvent(new w.Event("click", { bubbles: true })); await sleep(800);
+  const items = (await w.__zettl.readLocal("shopping", [])).filter(i => !i.deleted);
+  if (!items.some(i => i.name === "Klopapier")) throw new Error("Antippen setzt nichts auf die Liste");
+  ok("Agent 154 – Auf dem leeren Zettel steht der Verlauf und lässt sich antippen");
 } catch (e) { bad("Agent 154", e); }
 
 // ---------------- Agent 155: Obergrenze acht, jüngstes zuerst
@@ -3467,15 +3476,20 @@ try {
 // ---------------- Agent 158: Uralte Käufe verstopfen den Verlauf nicht
 try {
   const { w } = makePhone(); await setup(w);
+  // Direkt an der Grenze prüfen, nicht 200 gegen 10 – sonst bliebe eine Lockerung
+  // der Schranke auf 180 Tage unbemerkt.
   await w.__zettl.writeLocal("prices", {
-    "faschingskrapfen": { byStore: {}, lastName: "Faschingskrapfen", buys: [vorTagen(200)], updatedAt: 1 },
-    "mehl":             { byStore: {}, lastName: "Mehl",             buys: [vorTagen(10)],  updatedAt: 1 }
+    "faschingskrapfen": { byStore: {}, lastName: "Faschingskrapfen", buys: [vorTagen(91)], updatedAt: 1 },
+    "mehl":             { byStore: {}, lastName: "Mehl",             buys: [vorTagen(89)], updatedAt: 1 },
+    "backpulver":       { byStore: {}, lastName: "Backpulver", buys: [vorTagen(240), vorTagen(120)], updatedAt: 1 }
   });
   await w.__zettl.boot(); await sleep(700);
   const namen = [...w.document.querySelectorAll("[data-zuletzt]")].map(b => b.textContent);
-  if (namen.some(n => n.includes("Faschingskrapfen"))) throw new Error("200 Tage alter Kauf wird noch vorgeschlagen");
-  if (!namen.some(n => n.includes("Mehl"))) throw new Error("Frischer Kauf fehlt");
-  ok("Agent 158 – Käufe älter als ein Vierteljahr fallen aus dem Verlauf");
+  if (namen.some(n => n.includes("Faschingskrapfen"))) throw new Error("91 Tage alter Kauf wird noch vorgeschlagen");
+  if (!namen.some(n => n.includes("Mehl"))) throw new Error("89 Tage alter Kauf fehlt");
+  // Langer Rhythmus, längst überfällig: muss trotz der 90 Tage stehen bleiben
+  if (!namen.some(n => n.includes("Backpulver"))) throw new Error("Überfälliges mit langem Rhythmus fällt raus");
+  ok("Agent 158 – Grenze bei 90 Tagen, Überfälliges mit langem Rhythmus bleibt");
 } catch (e) { bad("Agent 158", e); }
 
 // ---------------- Agent 159: "Ins Wagerl" im Dialog zählt als Kauf
@@ -3508,8 +3522,9 @@ try {
 } catch (e) { bad("Agent 160", e); }
 
 // ---------------- Agent 161: Mehr als fünf Alternativen, in einem scrollbaren Bereich
+const altVor161 = PREISDATEI.inhalt;
 try {
-  const alt = PREISDATEI.inhalt;
+  const alt = altVor161;
   const viele = [];
   for (let i = 0; i < 12; i++)
     viele.push(["Bergkäse Sorte " + i, 5 + i / 2, ["Billa", "Spar", "Hofer"][i % 3], (200 + i * 50) + " g", 0, 0, 0, "kuehl"]);
@@ -3524,29 +3539,40 @@ try {
   const css = w.document.querySelector("style").textContent;
   const i = css.indexOf(".alts{");
   if (!css.slice(i, css.indexOf("}", i)).includes("overflow-y:auto")) throw new Error("Alternativen nicht scrollbar");
-  PREISDATEI.inhalt = alt;
   ok("Agent 161 – " + n + " Alternativen statt fünf, in einem eigenen Scrollbereich");
 } catch (e) { bad("Agent 161", e); }
+// Muss auch nach einem Fehlschlag zurück, sonst laufen alle folgenden Agenten
+// gegen die zwölf erfundenen Bergkäse-Sorten statt gegen die echte Fixture.
+finally { PREISDATEI.inhalt = altVor161; PREISDATEI.fail = false; }
 
 // ---------------- Agent 162: Reihenfolge im Einkaufen-Tab
 try {
   const { w } = makePhone(); await setup(w);
   await w.__zettl.writeLocal("prices", {
     "milch": { byStore: { "Billa": { price: 1.32 } }, last: { price: 1.32, store: "Billa" }, lastName: "Milch", updatedAt: 1 },
-    "brot":  { byStore: { "Billa": { price: 2.49 } }, last: { price: 2.49, store: "Billa" }, lastName: "Brot",  updatedAt: 1 }
+    "brot":  { byStore: { "Billa": { price: 2.49 } }, last: { price: 2.49, store: "Billa" }, lastName: "Brot",  updatedAt: 1 },
+    // steht NICHT auf der Liste – damit der Verlaufsblock überhaupt rendert
+    "salz":  { byStore: {}, lastName: "Salz", buys: [vorTagen(4)], updatedAt: 1 }
   });
   await w.__zettl.boot(); await sleep(600);
-  await addItem(w, "Milch"); await addItem(w, "Brot"); await sleep(500);
+  await addItem(w, "Milch"); await addItem(w, "Brot"); await sleep(400);
+  // einen abhaken, damit auch "Im Wagerl" in der Kette steckt
+  [...w.document.querySelectorAll("[data-toggle]")].find(b => b.closest(".item").textContent.includes("Brot"))
+    .dispatchEvent(new w.Event("click", { bubbles: true })); await sleep(500);
   const h = w.document.querySelector(".list").innerHTML;
   const iSparen = h.indexOf('id="sparen"'), iItem = h.indexOf("data-toggle"),
+        iWagerl = h.indexOf('w:wagerl'), iZuletzt = h.indexOf("data-zuletzt"),
         iKosten = h.indexOf('id="priceHelp"'), iCo2 = h.indexOf('id="co2Help"');
-  if (iSparen < 0) throw new Error("Sparen-Knopf fehlt");
-  if (iItem < 0) throw new Error("Keine Artikel gerendert");
-  if (iKosten < 0) throw new Error("Kostenkarte fehlt");
-  if (!(iSparen < iItem)) throw new Error("Sparen-Knopf steht nicht oben");
-  if (!(iItem < iKosten)) throw new Error("Artikel stehen nicht vor der Zusammenfassung");
-  if (iCo2 >= 0 && !(iKosten < iCo2)) throw new Error("Klimabilanz steht nicht nach der Zusammenfassung");
-  ok("Agent 162 – Reihenfolge: Sparen, Artikel, Zusammenfassung, Klima");
+  for (const [i, was] of [[iItem, "Artikel"], [iWagerl, "Im Wagerl"], [iZuletzt, "Zuletzt gekauft"],
+                          [iKosten, "Kostenkarte"], [iCo2, "Klimabilanz"]])
+    if (i < 0) throw new Error(was + " fehlt");
+  // Sparen-Knopf braucht zwei OFFENE Artikel, hier ist nur noch Milch offen
+  if (iSparen >= 0 && !(iSparen < iItem)) throw new Error("Sparen-Knopf steht nicht oben");
+  if (!(iItem < iWagerl)) throw new Error("Offene Artikel stehen nicht vor dem Wagerl");
+  if (!(iWagerl < iZuletzt)) throw new Error("Verlauf steht nicht nach dem Wagerl");
+  if (!(iZuletzt < iKosten)) throw new Error("Verlauf steht nicht vor der Zusammenfassung");
+  if (!(iKosten < iCo2)) throw new Error("Klimabilanz steht nicht nach der Zusammenfassung");
+  ok("Agent 162 – Reihenfolge: Artikel, Wagerl, Verlauf, Zusammenfassung, Klima");
 } catch (e) { bad("Agent 162", e); }
 
 // ---------------- Agent 163: Farbstrich zeigt die Warengruppe, Punkt die Person
