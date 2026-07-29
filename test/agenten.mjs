@@ -3688,6 +3688,52 @@ try {
   ok("Agent 166 – Alte Schlüssel werden gefaltet, feldweise zusammengeführt, zweiter Lauf ändert nichts");
 } catch (e) { bad("Agent 166", e); }
 
+// ---------------- Agent 167: Aus dem Verlauf vergessen, und wieder zurückholen
+try {
+  const { w } = makePhone(); await setup(w);
+  await w.__zettl.writeLocal("prices", {
+    "kondome": { byStore: {}, lastName: "Kondome", buys: [vorTagen(3)], updatedAt: 1 },
+    "mehl":    { byStore: {}, lastName: "Mehl",    buys: [vorTagen(4)], updatedAt: 1 }
+  });
+  await w.__zettl.boot(); await sleep(800);
+  const chip = [...w.document.querySelectorAll("[data-zuletzt]")].find(b => b.textContent.includes("Kondome"));
+  if (!chip) throw new Error("Eintrag steht nicht im Verlauf");
+  // langes Drücken: drücken, warten, erst danach loslassen
+  chip.dispatchEvent(new w.Event("pointerdown", { bubbles: true }));
+  await sleep(1400);
+  chip.dispatchEvent(new w.Event("pointerup", { bubbles: true }));
+  await sleep(400);
+  const p = await w.__zettl.readLocal("prices", {});
+  if ((p["kondome"].buys || []).length) throw new Error("Kaufdaten nicht geleert");
+  if (!p["kondome"].vergessenAt) throw new Error("Keine Vergessen-Marke gesetzt");
+  if (!(p["mehl"].buys || []).length) throw new Error("Der falsche Eintrag wurde vergessen");
+  const namen = [...w.document.querySelectorAll("[data-zuletzt]")].map(b => b.textContent);
+  if (namen.some(n => n.includes("Kondome"))) throw new Error("Eintrag steht trotz Vergessen noch da");
+  if (!namen.some(n => n.includes("Mehl"))) throw new Error("Der Rest des Verlaufs ist mit weg");
+
+  // Kurzes Drücken darf NICHT vergessen, sondern muss auf die Liste setzen
+  const chip2 = [...w.document.querySelectorAll("[data-zuletzt]")].find(b => b.textContent.includes("Mehl"));
+  chip2.dispatchEvent(new w.Event("pointerdown", { bubbles: true }));
+  await sleep(80);
+  chip2.dispatchEvent(new w.Event("pointerup", { bubbles: true }));
+  chip2.dispatchEvent(new w.Event("click", { bubbles: true }));
+  await sleep(900);
+  const items = (await w.__zettl.readLocal("shopping", [])).filter(i => !i.deleted);
+  if (!items.some(i => i.name === "Mehl")) throw new Error("Kurzer Tipp setzt nichts auf die Liste");
+  if (!((await w.__zettl.readLocal("prices", {}))["mehl"].buys || []).length)
+    throw new Error("Kurzer Tipp hat den Verlauf gelöscht");
+
+  // Wer es wieder kauft, holt es zurück: die Marke muss weichen
+  await addItem(w, "Kondome"); await sleep(300);
+  [...w.document.querySelectorAll("[data-toggle]")].find(b => b.closest(".item").textContent.includes("Kondome"))
+    .dispatchEvent(new w.Event("click", { bubbles: true }));
+  await sleep(900);
+  const p2 = await w.__zettl.readLocal("prices", {});
+  if (p2["kondome"].vergessenAt) throw new Error("Marke bleibt trotz neuem Kauf stehen");
+  if (!(p2["kondome"].buys || []).length) throw new Error("Neuer Kauf nicht vermerkt");
+  ok("Agent 167 – Langes Drücken vergisst, kurzes Tippen nicht, neuer Kauf hebt es auf");
+} catch (e) { bad("Agent 167", e); }
+
 console.log("\n================ TESTLAUF ================");
 results.forEach(r => console.log((r[0] === "PASS" ? "✅" : "❌") + "  " + r[1] + (r[2] ? "\n     → " + r[2] : "")));
 const fails = results.filter(r => r[0] === "FAIL").length;

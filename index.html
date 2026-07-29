@@ -1100,6 +1100,28 @@ async function noteBought(name){
     e.buys.push(today());
     e.lastName = e.lastName || name;
     if(e.buys.length > 12) e.buys = e.buys.slice(-12);
+    // Wer den Artikel wieder kauft, will ihn offenbar wieder im Verlauf haben.
+    // Die Vergessen-Marke muss weg, sonst filtert sie den neuen Kauf gleich mit.
+    delete e.vergessenAt;
+    e.updatedAt = now();
+    cur[key] = e;
+    S.prices = cur;
+    await writeLocal("prices", cur);
+  });
+  if(syncOn()) syncNow(true);
+}
+// Aus dem Verlauf nehmen. Nötig, seit dort auch einmalig Gekauftes steht: was
+// einmal auf dem Zettel war – ein Medikament, ein Geschenk – bliebe sonst 90 Tage
+// lang für beide sichtbar. Die Marke bleibt liegen, damit die Vereinigung beim
+// Sync die Kaufdaten nicht vom anderen Handy zurückholt.
+async function vergessen(name){
+  await withLock(async () => {
+    const cur = await readLocal("prices", {});
+    const key = norm(name);
+    const e = normPriceEntry(cur[key]);
+    if(!e) return;
+    e.buys = [];
+    e.vergessenAt = now();
     e.updatedAt = now();
     cur[key] = e;
     S.prices = cur;
@@ -1165,7 +1187,8 @@ function zuletztBlock(){
   let liste;
   try { liste = zuletztGekauft(); } catch(e){ return ""; }
   if(!liste.length) return "";
-  return '<div class="zuletzt"><div class="muted" style="margin-bottom:6px">Zuletzt gekauft</div>'
+  return '<div class="zuletzt"><div class="muted" style="margin-bottom:6px">Zuletzt gekauft'
+   + ' <span style="opacity:.6">· lange drücken zum Vergessen</span></div>'
    + '<div class="chips">'
    + liste.map(z => '<button class="chip" data-zuletzt="'+esc(z.key)+'">'
        + catIcon(katFuer(z.name),15)+' '+esc(z.name)
@@ -3261,16 +3284,33 @@ function wireShoppingBar(){
   });
   // Zuletzt gekauft: der normalisierte Name steht im Attribut, nicht der Listenindex –
   // sonst zeigt ein Tipp nach einem Sync dazwischen auf den falschen Artikel.
-  document.querySelectorAll("[data-zuletzt]").forEach(b => b.onclick = async () => {
+  document.querySelectorAll("[data-zuletzt]").forEach(b => {
     const key = b.getAttribute("data-zuletzt");
-    // Erst prüfen, dann sperren – sonst bleibt der Knopf bei einem frühen Ausstieg tot
-    if(zuletztBusy.has(key)) return;
-    if(visible(S.shopping).some(i => norm(i.name) === key)) return;   // steht schon drauf
-    const e = normPriceEntry(S.prices[key]);
-    const name = (e && e.lastName) || key;
-    zuletztBusy.add(key);
-    try { await addProductsToList([name]); }
-    finally { zuletztBusy.delete(key); render(); }
+    const nameVon = () => { const e = normPriceEntry(S.prices[key]); return (e && e.lastName) || key; };
+    // Langes Drücken vergisst den Eintrag, ein kurzer Tipp setzt ihn auf die Liste.
+    let timer = null, lang = false;
+    const los = () => {
+      if(timer) return;                       // pointerdown und mousedown feuern beide
+      lang = false;
+      timer = setTimeout(async () => {
+        timer = null; lang = true;
+        await vergessen(nameVon());
+        toast("Aus dem Verlauf entfernt");
+      }, 550);
+    };
+    const weg = () => { if(timer){ clearTimeout(timer); timer = null; } };
+    ["pointerdown","mousedown","touchstart"].forEach(ev => b.addEventListener(ev, los));
+    ["pointerup","pointercancel","pointerleave","mouseup","mouseleave","touchend","touchcancel","touchmove"]
+      .forEach(ev => b.addEventListener(ev, weg));
+    b.onclick = async () => {
+      if(lang){ lang = false; return; }       // war ein langes Drücken, kein Antippen
+      // Erst prüfen, dann sperren – sonst bleibt der Knopf bei einem frühen Ausstieg tot
+      if(zuletztBusy.has(key)) return;
+      if(visible(S.shopping).some(i => norm(i.name) === key)) return;   // steht schon drauf
+      zuletztBusy.add(key);
+      try { await addProductsToList([nameVon()]); }
+      finally { zuletztBusy.delete(key); render(); }
+    };
   });
   document.querySelectorAll("[data-cat]").forEach(b => b.onclick = () => {
     S.draft.cat = b.getAttribute("data-cat"); render(); });
