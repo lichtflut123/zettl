@@ -877,6 +877,13 @@ try {
   if (!t.includes("3,79")) throw new Error("Summe fehlt: " + t.slice(0, 120));
   if (!t.includes("2 von 3")) throw new Error("Artikelzähler falsch");
   if (!t.includes("Hofer") || !t.includes("Billa")) throw new Error("Aufteilung fehlt");
+  // Der Hinweis zum zweiten Laden nennt einen Betrag, der dort LIEGT – keine
+  // Ersparnis. "bringt" las sich wie ein Gewinn und war damit eine erfundene
+  // Ersparnis im Sinne von CLAUDE.md.
+  if (/Laden bringt/.test(t)) throw new Error("Zweiter-Laden-Hinweis behauptet wieder einen Gewinn");
+  if (!t.includes("Davon liegen")) throw new Error("Hinweis zum zweiten Laden fehlt: " + t.slice(0, 200));
+  if (!/Davon liegen 1,29 € bei Hofer/.test(t))
+    throw new Error("Falscher Betrag oder Laden im Hinweis: " + t.slice(0, 200));
   click(w, "#priceHelp"); await sleep(250);
   t = txt(w);
   if (!t.includes("Aufteilung")) throw new Error("Preis-Dialog ohne Aufteilung");

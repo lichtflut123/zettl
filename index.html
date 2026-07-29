@@ -2365,7 +2365,11 @@ function basketCard(){
         + a.stores.map(s=>{const sh=shopByName(s); return sh&&sh.dist!=null ? esc(s)+" "+esc(String(sh.dist).replace(".",","))+" km" : null;})
             .filter(Boolean).join(" · ")+'</div>' : '')
    + (twoStores && rest > 0
-      ? '<div class="muted" style="margin-top:4px">Zweiter Laden bringt '+esc(euro(rest))+' – überleg dir, ob sich der Weg lohnt.</div>'
+      // "bringt" las sich wie eine Ersparnis. Der Betrag ist aber das, was im
+      // zweiten Laden liegt – also der Grund für den Weg, nicht der Gewinn.
+      ? '<div class="muted" style="margin-top:4px">Davon liegen '+esc(euro(rest))+' '
+        + (a.stores.length===2 ? 'bei '+esc(a.stores[1]) : 'in anderen Läden')
+        + ' – überleg dir, ob sich der Weg dafür lohnt.</div>'
       : '')
    + '</div>';
 }
