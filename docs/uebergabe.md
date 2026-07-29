@@ -8,7 +8,7 @@ Stand: 29. Juli 2026. Alles Folgende ist getestet, sofern nicht anders vermerkt.
 |---|---|
 | `index.html` | Die ganze App, eine Datei, 195 KB |
 | `preise.json` | 52.253 Artikel mit Preisen, 4,0 MB |
-| `test/agenten.mjs` | 167 Testagenten, die die App im Browser durchklicken |
+| `test/agenten.mjs` | 169 Testagenten, die die App im Browser durchklicken |
 | `server/` | Optionaler Preis-Server samt Importern |
 | `patches/hofer-fetcher-fix.patch` | Reparatur für heisse-preise (Hofer) |
 | `patches/dm-fetcher-fix.patch` | Reparatur für heisse-preise (dm) |

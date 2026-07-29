@@ -3655,6 +3655,39 @@ try {
 } catch (e) { bad("Agent 165", e); }
 finally { PREISDATEI.inhalt = altVor165; PREISDATEI.fail = false; }
 
+// ---------------- Agent 166: Migration der Schlüssel auf die gefaltete Form
+try {
+  const { w } = makePhone(); await setup(w);
+  // Zwei Einträge zum selben Artikel, alt und neu geschrieben. Beim Falten treffen
+  // sie sich auf einem Schlüssel und müssen feldweise zusammengeführt werden.
+  await w.__zettl.writeLocal("prices", {
+    "erdäpfel":  { byStore: { "Billa": { price: 1.89, at: "2026-07-01" } },
+                   lastName: "Erdäpfel", buys: ["2026-07-01"], updatedAt: 1 },
+    "erdaepfel": { byStore: { "Hofer": { price: 4.42, at: "2026-07-10" } },
+                   lastName: "Erdaepfel", buys: ["2026-07-05"], updatedAt: 2 },
+    "müsli":     { byStore: {}, lastName: "Müsli", buys: ["2026-07-08"], updatedAt: 1 }
+  });
+  await w.__zettl.boot(); await sleep(900);
+  const p = await w.__zettl.readLocal("prices", {});
+  if (p["erdäpfel"]) throw new Error("Alter Schlüssel steht noch da");
+  if (p["müsli"]) throw new Error("Alter Schlüssel 'müsli' steht noch da");
+  if (!p["muesli"]) throw new Error("'müsli' wurde nicht auf 'muesli' umgeschrieben");
+  const e = p["erdaepfel"];
+  if (!e) throw new Error("Gefalteter Schlüssel fehlt");
+  // feldweise: beide Läden, beide Kaufdaten, jüngerer Anzeigename
+  if (!e.byStore.Billa || !e.byStore.Hofer) throw new Error("Preise nicht zusammengeführt: " + Object.keys(e.byStore).join(","));
+  if (e.byStore.Billa.price !== 1.89 || e.byStore.Hofer.price !== 4.42) throw new Error("Falsche Preise übernommen");
+  if (!(e.buys || []).includes("2026-07-01") || !(e.buys || []).includes("2026-07-05"))
+    throw new Error("Kaufdaten nicht vereinigt: " + JSON.stringify(e.buys));
+  if (e.lastName !== "Erdaepfel") throw new Error("Jüngerer Anzeigename verloren: " + e.lastName);
+  // mehrfach anwendbar: ein zweiter Start darf nichts mehr verändern
+  const vorher = JSON.stringify(p);
+  await w.__zettl.boot(); await sleep(700);
+  if (JSON.stringify(await w.__zettl.readLocal("prices", {})) !== vorher)
+    throw new Error("Zweiter Start verändert die Daten noch einmal");
+  ok("Agent 166 – Alte Schlüssel werden gefaltet, feldweise zusammengeführt, zweiter Lauf ändert nichts");
+} catch (e) { bad("Agent 166", e); }
+
 console.log("\n================ TESTLAUF ================");
 results.forEach(r => console.log((r[0] === "PASS" ? "✅" : "❌") + "  " + r[1] + (r[2] ? "\n     → " + r[2] : "")));
 const fails = results.filter(r => r[0] === "FAIL").length;

@@ -284,7 +284,7 @@ function katFuer(name){
 function guessCat(name){
   const n = norm(name);
   let cat = "sonst", score = 0;
-  for(const [c, words] of CAT_WORDS){
+  for(const [c, words] of CAT_WORDS_N){       // gefaltet, passend zu norm()
     for(const w of words){
       const i = n.indexOf(w);
       if(i < 0) continue;
@@ -671,7 +671,7 @@ const TASK_PRODUCTS = [
 function productsForTask(title){
   const n = norm(title);
   const out = [];
-  TASK_PRODUCTS.forEach(([keys, prods]) => {
+  TASK_PRODUCTS_N.forEach(([keys, prods]) => {   // gefaltet, passend zu norm()
     if(keys.some(k => n.indexOf(k) >= 0))
       prods.forEach(p => { if(out.indexOf(p) < 0) out.push(p); });
   });
@@ -700,7 +700,17 @@ const $ = (sel, root) => (root||document).querySelector(sel);
 const esc = (s) => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now()+"-"+Math.random().toString(16).slice(2));
 const now = () => Date.now();
-const norm = (s) => String(s).trim().toLowerCase().replace(/\s+/g," ");
+// Umlaute werden gefaltet. Zwei Gründe: am Handy tippt man "kaese", und die
+// Händlerdaten selbst schreiben es mal so, mal so – "Kronenöl" und "Kronenoel"
+// sind derselbe Artikel. norm() ist zugleich der Schlüssel des Kaufgedächtnisses;
+// Altbestände werden beim Start umgeschrieben, siehe migriereSchluessel().
+const norm = (s) => String(s).trim().toLowerCase()
+  .replace(/ä/g,"ae").replace(/ö/g,"oe").replace(/ü/g,"ue").replace(/ß/g,"ss")
+  .replace(/\s+/g," ");
+// Die fest verdrahteten Wortlisten stehen mit Umlauten da, weil sie so lesbar
+// bleiben. Verglichen wird aber gegen gefalteten Text – also einmal durchschicken.
+const CAT_WORDS_N = CAT_WORDS.map(([c, ws]) => [c, ws.map(norm)]);
+const TASK_PRODUCTS_N = TASK_PRODUCTS.map(([keys, prods]) => [keys.map(norm), prods]);
 function today(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function addDays(iso,n){ const d=new Date(iso+"T00:00:00"); d.setDate(d.getDate()+n); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function dayDiff(iso){ if(!iso) return null; return Math.round((new Date(iso+"T00:00:00") - new Date(today()+"T00:00:00"))/86400000); }
@@ -807,11 +817,35 @@ function mergeItems(a, b){
   const cutoff = now() - 30*86400000;
   return [...map.values()].filter(it => !(it.deleted && (it.updatedAt||0) < cutoff));
 }
+// Zwei Einträge zum selben Artikel feldweise zusammenführen statt den ganzen zu
+// ersetzen. Vorher gewann der jüngere komplett – haken beide Handys am selben Tag
+// ab oder trägt eines einen Preis nach, ging dem anderen sein Kaufdatum verloren.
+function mergePriceEntry(a, b){
+  a = normPriceEntry(a); b = normPriceEntry(b);
+  if(!a) return b;
+  if(!b) return a;
+  const neuer = (b.updatedAt||0) >= (a.updatedAt||0) ? b : a, alt = (neuer === b) ? a : b;
+  const byStore = Object.assign({}, alt.byStore);
+  for(const s in (neuer.byStore||{})){
+    const x = neuer.byStore[s], y = byStore[s];
+    if(!y || String(x.at||"") >= String(y.at||"")) byStore[s] = x;   // je Laden der frischere Preis
+  }
+  // vergessenAt schneidet Käufe ab, die jemand bewusst gelöscht hat. Ohne das
+  // holt eine Vereinigung sie beim nächsten Sync vom anderen Handy zurück.
+  const vergessen = Math.max(a.vergessenAt||0, b.vergessenAt||0);
+  const grenze = vergessen ? new Date(vergessen).toISOString().slice(0,10) : null;
+  const buys = [...new Set([].concat(a.buys||[], b.buys||[]))]
+    .filter(d => typeof d === "string" && d && (!grenze || d > grenze))
+    .sort().slice(-12);
+  const out = { byStore, last: neuer.last || alt.last,
+    lastName: neuer.lastName || alt.lastName, buys,
+    updatedAt: Math.max(a.updatedAt||0, b.updatedAt||0) };
+  if(vergessen) out.vergessenAt = vergessen;
+  return out;
+}
 function mergePrices(a, b){
   const out = Object.assign({}, a||{});
-  for(const k in (b||{})){
-    if(!out[k] || (b[k].updatedAt||0) > (out[k].updatedAt||0)) out[k]=b[k];
-  }
+  for(const k in (b||{})) out[k] = out[k] ? mergePriceEntry(out[k], b[k]) : b[k];
   return out;
 }
 const visible = (arr) => (arr||[]).filter(i => !i.deleted);
@@ -1017,7 +1051,11 @@ async function addTasksFromTips(roomName, picks){
 function normPriceEntry(e){
   if(!e) return null;
   if(e.byStore) return e;
-  const out = { byStore:{}, last:{price:e.price!=null?e.price:null, store:e.store||null, at:e.at||null}, updatedAt:e.updatedAt||0 };
+  // lastName und buys mitnehmen – der Zweig hat sie früher verschluckt, und
+  // noteBought baut sein e aus genau diesem Rückgabewert.
+  const out = { byStore:{}, last:{price:e.price!=null?e.price:null, store:e.store||null, at:e.at||null},
+    lastName: e.lastName || null, buys: Array.isArray(e.buys) ? e.buys : [],
+    vergessenAt: e.vergessenAt || 0, updatedAt: e.updatedAt||0 };
   if(e.price!=null && e.store) out.byStore[e.store] = { price:e.price, at:e.at||null };
   return out;
 }
@@ -1186,8 +1224,9 @@ function kiloAus(unit, cat){
     return z * (STK_GEWICHT[cat] || 0.3);
   return null;
 }
-// Umlaute weg vor dem Vergleich – sonst findet "huhn" die "Hühnerbrust" nicht
-const ohneUmlaut = (s) => norm(s).replace(/ä/g,"a").replace(/ö/g,"o").replace(/ü/g,"u").replace(/ß/g,"ss");
+// Umlaute weg vor dem Vergleich – sonst findet "huhn" die "Hühnerbrust" nicht.
+// norm() faltet inzwischen auf "hue", hier wird daraus der nackte Vokal.
+const ohneUmlaut = (s) => norm(s).replace(/ae/g,"a").replace(/oe/g,"o").replace(/ue/g,"u");
 // Preis pro Kilo, Liter oder Stück – die einzige Zahl, die Packungen vergleichbar macht
 function grundpreis(preis, einheit){
   if(preis == null || !einheit) return null;
@@ -1502,12 +1541,33 @@ async function boot(){
   }
   S.phase="unlock"; render();
 }
+// Das Kaufgedächtnis ist nach norm(name) verschlüsselt abgelegt. Seit norm()
+// Umlaute faltet, liegen ältere Einträge unter dem alten Schlüssel und wären
+// unauffindbar – "erdäpfel" statt "erdaepfel". Läuft bei jedem Start und ist
+// mehrfach anwendbar: schreibt ein Handy im Funkloch noch mit der alten Fassung,
+// wird das beim nächsten Start wieder eingesammelt. Eine Versionsmarkierung
+// braucht es dafür nicht, und es gibt auch keine.
+async function migriereSchluessel(){
+  const cur = S.prices || {};
+  let noetig = false;
+  for(const k in cur){ if(norm(k) !== k){ noetig = true; break; } }
+  if(!noetig) return;
+  const neu = {};
+  for(const k in cur){
+    const nk = norm(k);
+    neu[nk] = neu[nk] ? mergePriceEntry(neu[nk], cur[k]) : cur[k];
+  }
+  S.prices = neu;
+  await writeLocal("prices", neu);
+  if(syncOn()) syncNow(true);
+}
 async function loadAll(){
   S.members  = await readLocal("members", []);
   S.rooms    = await readLocal("rooms", []);
   S.shopping = await readLocal("shopping", []);
   S.tasks    = await readLocal("tasks", []);
   S.prices   = await readLocal("prices", {});
+  await migriereSchluessel();
   S.plan     = await readLocal("plan", {bg:{}}) || {bg:{}};
   if(!S.plan.bg) S.plan.bg = {};
   S.shops    = await readLocal("shops", {home:null, list:[]}) || {home:null, list:[]};
@@ -1953,7 +2013,10 @@ function resetAll(){
 }
 // Rät den Raumtyp aus dem Namen, damit die Vorschläge sofort passen
 function guessType(name){
-  const n = norm(name);
+  // ohneUmlaut, nicht norm: die Regeln unten führen die Schreibweisen ohne Umlaut
+  // ohnehin schon mit ("waschkuch", "kuch", "sanitar"), und nach der Faltung
+  // träfe "waschküch" das gefaltete "waschkueche" nicht mehr.
+  const n = ohneUmlaut(name);
   const rules = [
     [/waschkuch|waschküch|waschraum|waschk/, "wasch"],      // vor "Küche"!
     [/heiz|technikr|boiler|kessel/, "heizraum"],

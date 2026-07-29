@@ -70,6 +70,14 @@ function feinerAlsKuehl(name, worte) {
 // Die Wortlisten stehen in der App (index.html, const CAT_WORDS). Sie werden von
 // dort gelesen statt hier abgeschrieben – sonst laufen beide Listen auseinander
 // und die Preisdatei ordnet anders ein als die App bei handgetippten Artikeln.
+// Muss zeichengleich zu norm() in index.html falten, sonst ordnet die Preisdatei
+// anders ein als die App bei handgetippten Artikeln – genau das soll die geteilte
+// Wortliste verhindern.
+function falte(s) {
+  return String(s).trim().toLowerCase()
+    .replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
+    .replace(/\s+/g, " ");
+}
 function ladeWortlisten(pfad) {
   const html = fs.readFileSync(pfad, "utf8");
   const start = html.indexOf("const CAT_WORDS = [");
@@ -83,7 +91,7 @@ function ladeWortlisten(pfad) {
   if (bis < 0) throw new Error("CAT_WORDS in " + pfad + " ist nicht geschlossen");
   const paare = JSON.parse(html.slice(von, bis));
   const out = {};
-  paare.forEach(([gruppe, worte]) => { out[gruppe] = worte; });
+  paare.forEach(([gruppe, worte]) => { out[gruppe] = worte.map(falte); });
   return out;
 }
 
@@ -118,7 +126,7 @@ const REGIONAL_WORTE = [
   "weinviertler", "mostviertler", "pinzgauer", "pongauer", "lungauer",
   "bregenzerwälder", "montafoner", "ennstaler", "almliesl", "alpenländisch",
   "vom bauern aus", "aus dem alpenraum", "ama-gütesiegel", "ama gütesiegel"
-];
+].map(falte);   // die Namen werden gefaltet verglichen, die Liste muss mit
 // Bewusst KEINE Markenliste: Ein Versuch damit (Alma, Eskimo, Rauch, NÖM …) hat die
 // Übereinstimmung mit der bisherigen Datei von 93,0 auf 90,9 Prozent verschlechtert –
 // er hat "regional" bei Artikeln behauptet, die es selbst nicht behaupten. Lieber
@@ -213,7 +221,7 @@ async function ladeDump() {
   for (const it of items) {
     if (frisch.indexOf(it.store) < 0) continue;
     if (it.unavailable && flagLos[it.store]) continue;
-    const klein = String(it.name || "").toLowerCase();
+    const klein = falte(it.name);
     push(it.name, it.price, KETTEN[it.store], menge(it.quantity, it.unit), istAktion(it),
       istBio(it, klein), istRegional(klein), gruppeFuer(it, klein));
   }
@@ -229,7 +237,7 @@ async function ladeDump() {
         const roh2 = await store.fetchData();
         const k = roh2.map((i) => store.getCanonical(i, HEUTE)).filter(Boolean);
         k.forEach((p) => {
-          const klein = String(p.name || "").toLowerCase();
+          const klein = falte(p.name);
           push(p.name, p.price, KETTEN[s], menge(p.quantity, p.unit), false,
             istBio(p, klein), istRegional(klein), gruppeFuer(p, klein));
         });
