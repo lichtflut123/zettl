@@ -1383,21 +1383,53 @@ function sparPlan(){
   const offen = visible(S.shopping).filter(i => !i.done);
   const zeilen = offen.map(i => {
     const jetzt = (i.price != null) ? { price:i.price, store:i.store||null } : null;
+    const eigeneMenge = i.size || itemMenge(i);
+    const eigenGp = grundpreis(i.price, eigeneMenge);      // was ihr jetzt pro kg/l zahlt
     let besser = null, alle = [];
-    // Kandidat aus der Preisdatei
-    const hits = (pdIndex && pdIndex.length) ? pdSuche(nameOhneGroesse(i.name), 3) : [];
-    if(hits.length){
-      const h = hits[0];
-      alle = h.prices.slice();
-      besser = { name:h.name, unit:h.unit, price:h.best.price, store:h.best.store, bio:h.bio, regional:h.regional };
+    // Vergleichbares suchen, nicht nur den bestplatzierten Treffer: Die Marke ist
+    // egal, ein halber Liter Milch darf gegen einen günstigeren Liter getauscht
+    // werden. Erst nach Relevanz kürzen, dann nach Grundpreis – sonst gilt das
+    // Billigste als Alternative, auch wenn es etwas ganz anderes ist.
+    const roh = (pdIndex && pdIndex.length) ? pdSuche(nameOhneGroesse(i.name), 12) : [];
+    if(roh.length){
+      const kand = [];
+      roh.slice(0, 8).forEach(h => {
+        if(!h.best || h.best.price == null) return;
+        const g = grundpreis(h.best.price, h.unit);
+        // Nur vergleichen, was dieselbe Einheit hat. Euro je Liter gegen Euro je
+        // Kilo zu stellen ergäbe Unsinn – dann wäre Käse eine billige Milch.
+        if(eigenGp && (!g || g.je !== eigenGp.je)) return;
+        kand.push({ h, gp: g ? g.wert : null });
+      });
+      // Ohne eigenen Grundpreis bleibt es beim relevantesten Treffer
+      const wahl = eigenGp ? kand.filter(k => k.gp != null).sort((a,b) => a.gp - b.gp)[0]
+                           : { h: roh[0], gp: null };
+      if(wahl){
+        const h = wahl.h;
+        alle = h.prices.slice();
+        besser = { name:h.name, unit:h.unit, price:h.best.price, store:h.best.store,
+                   bio:h.bio, regional:h.regional, gp:wahl.gp, je:eigenGp ? eigenGp.je : null,
+                   verliertBio: !!(i.bio && !h.bio), verliertRegional: !!(i.regional && !h.regional) };
+      }
     }
     // Eigenes Gedächtnis kann günstiger sein
     const mem = bestPrice(i.name);
     if(mem && mem.price != null && (!besser || mem.price < besser.price)){
-      besser = { name:i.name, unit:i.size||itemMenge(i), price:mem.price, store:mem.store };
+      besser = { name:i.name, unit:eigeneMenge, price:mem.price, store:mem.store };
       alle = [{ store:mem.store, price:mem.price }];
     }
-    const spart = (jetzt && besser && besser.price < jetzt.price - 0.005) ? jetzt.price - besser.price : 0;
+    // Ersparnis auf EURE Menge umgerechnet, nicht der Packungsunterschied –
+    // "1 kg statt 250 g spart 2 €" wäre sonst schlicht falsch.
+    let spart = 0;
+    if(jetzt && besser){
+      if(eigenGp && besser.gp != null){
+        const menge = jetzt.price / eigenGp.wert;            // in kg, l oder Stück
+        spart = (eigenGp.wert - besser.gp) * menge;
+      } else if(besser.price < jetzt.price){
+        spart = jetzt.price - besser.price;
+      }
+      if(!(spart > 0.01)) spart = 0;
+    }
     return { item:i, jetzt, besser, alle, spart };
   });
 
@@ -3015,6 +3047,10 @@ function modalSparen(){
                 + (gp ? ' <span style="color:var(--teal)">'+esc(gp)+'</span>' : '')
                 + (z.besser.name !== z.item.name ? ' <span style="opacity:.7">('+esc(String(z.besser.name).slice(0,28))+')</span>' : '')
               : 'kein Preis bekannt')+'</span></div>'
+          // Ehrlich sagen, was der Tausch kostet: Bio und Regional gehen dabei
+          // verloren, wenn das günstigere Produkt sie nicht hat.
+          + (z.besser && z.besser.verliertBio ? '<span class="badge" style="background:var(--warnbg);border-color:var(--warnline);color:var(--warn)">ohne Bio</span>' : '')
+          + (z.besser && z.besser.verliertRegional ? '<span class="badge" style="background:var(--warnbg);border-color:var(--warnline);color:var(--warn)">nicht regional</span>' : '')
           + (z.spart > 0.005 ? '<span class="badge" style="background:#ecfdf5;border-color:#a7f3d0;color:#065f46">−'+esc(euro(z.spart))+'</span>' : '')
           + '</div>';
        }).join("")
