@@ -3745,6 +3745,38 @@ try {
   ok("Agent 167 – Langes Drücken vergisst, kurzes Tippen nicht, neuer Kauf hebt es auf");
 } catch (e) { bad("Agent 167", e); }
 
+// ---------------- Agent 168: Zwei Syncs gleichzeitig laufen nicht doppelt
+try {
+  REMOTE.clear();
+  const cfg = JSON.stringify({ url: "https://parallel.supabase.co", key: "k" });
+  const { w } = makePhone({ "zettl.sync": cfg }); await setup(w);
+  await addItem(w, "Milch"); await sleep(600);
+  // Die ANZAHL der Anfragen unterscheidet die beiden Fälle nicht: ohne Sperre
+  // laufen zwei Syncs parallel (2 x 15), mit Sperre einer plus ein nachgezogener
+  // (auch 2 x 15). Was sie unterscheidet, ist die Gleichzeitigkeit. Also messen
+  // wir, wie viele Anfragen zu einem Zeitpunkt offen sind: innerhalb eines Laufs
+  // wird jede einzeln abgewartet, also höchstens eine. Zwei parallele Läufe
+  // erzeugen zwangsläufig zwei offene Anfragen.
+  let offen = 0, maxOffen = 0, anfragen = 0;
+  const echt = w.fetch;
+  w.fetch = (...a) => {
+    if (String(a[0]).indexOf("/rest/v1/") < 0) return echt(...a);
+    anfragen++; offen++; if (offen > maxOffen) maxOffen = offen;
+    return echt(...a).then(r => { offen--; return r; }, e => { offen--; throw e; });
+  };
+  const p1 = w.__zettl.syncNow(true);
+  const p2 = w.__zettl.syncNow(true);
+  await Promise.all([p1, p2]);
+  await sleep(900);                       // das Nachziehen laeuft ueber setTimeout
+  if (anfragen < 5) throw new Error("Nur " + anfragen + " Anfragen – die Zählung greift nicht");
+  if (maxOffen > 1)
+    throw new Error("Zwei Syncs liefen gleichzeitig: " + maxOffen + " Anfragen zugleich offen");
+  // und die Daten muessen heil sein
+  const items = (await w.__zettl.readLocal("shopping", [])).filter(i => !i.deleted);
+  if (!items.some(i => i.name === "Milch")) throw new Error("Artikel nach den Syncs verschwunden");
+  ok("Agent 168 – Gleichzeitige Syncs laufen nacheinander: nie mehr als eine Anfrage offen (" + anfragen + " gesamt)");
+} catch (e) { bad("Agent 168", e); }
+
 console.log("\n================ TESTLAUF ================");
 results.forEach(r => console.log((r[0] === "PASS" ? "✅" : "❌") + "  " + r[1] + (r[2] ? "\n     → " + r[2] : "")));
 const fails = results.filter(r => r[0] === "FAIL").length;

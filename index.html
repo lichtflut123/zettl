@@ -883,8 +883,16 @@ async function remotePut(name, data){
   return true;
 }
 // Holt Fremdes, mischt mit Eigenem, schreibt das Ergebnis zurück.
+// Läuft schon einer? Dann nicht ein zweites Mal starten, sondern hinterher einmal
+// nachziehen. Ein Tipp auf "Ins Wagerl" löste vorher zwei Läufe gleichzeitig aus –
+// updateItems einen und noteBought einen –, zusammen rund 30 Anfragen. Und wenn
+// der ältere Lauf hinterherkam, schrieb er den Stand OHNE den frischen
+// Kaufvermerk auf den Server; genau den holt sich das andere Handy dann.
+let syncLaeuft = false, syncNochmal = false;
 async function syncNow(silent){
   if(!syncOn()){ S.syncState="off"; if(!silent) render(); return; }
+  if(syncLaeuft){ syncNochmal = true; return; }
+  syncLaeuft = true;
   S.syncState="busy"; S.syncMsg=null; if(!silent) render();
   try{
     // Tresor zuerst: ohne ihn kann das andere Handy nichts entschlüsseln
@@ -936,6 +944,12 @@ async function syncNow(silent){
   }catch(e){
     S.syncState="error";
     S.syncMsg = (e && e.message) ? e.message : String(e);
+  }finally{
+    syncLaeuft = false;
+    // Während des Laufs kam noch eine Änderung – die einmal nachziehen. Im finally,
+    // damit auch der Rückweg unten sie nicht verschluckt; über setTimeout, damit
+    // sich die Läufe nicht ineinander schachteln.
+    if(syncNochmal){ syncNochmal = false; setTimeout(() => syncNow(true), 0); }
   }
   // Kam per Sync ein fertiger Haushalt herein? Dann nicht im Setup hängen bleiben.
   if(S.key && S.phase==="setup" && S.members && S.members.length===2){ await loadAll(); return; }
