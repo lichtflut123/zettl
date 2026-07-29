@@ -3,3 +3,12 @@ files.zip
 server/data.json
 server/import.log
 files/
+
+# Erzeugter Wissensgraph – baut sich jeder mit `graphify update .` selbst
+graphify-out/
+
+# Maschinenabhängige Einstellungen. settings.json enthält absolute Pfade auf
+# einen bestimmten Rechner; auf einem anderen schlagen die Hooks bei jedem
+# Werkzeugaufruf fehl. Was "local" heißt, gehört ohnehin nicht ins Repository.
+.claude/settings.json
+.claude/settings.local.json
