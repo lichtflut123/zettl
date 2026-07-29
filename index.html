@@ -2090,6 +2090,10 @@ const memberById = (id) => S.members.find(m=>m.id===id) || null;
 // ------------------------------------------------------------------ Views
 // Kennzeichen der aktuellen Ansicht. Ein Hintergrund-Sync zeichnet nur neu,
 // wenn sich daran etwas ändert – sonst springt einem die Liste unter dem Finger weg.
+// Der Artikel-Dialog kann aus der Liste kommen oder aus dem Preise-Dialog. Im
+// zweiten Fall soll man dorthin zurück – vorher landete man in der Liste und
+// musste den Preise-Dialog für jeden weiteren Preis neu öffnen.
+function schliesseItem(){ const z = S.modalBack; S.modalBack = null; S.modal = z || null; }
 function viewSig(){
   const sum = (a) => (a||[]).reduce((x,i)=>x+(i.updatedAt||0)+(i.done?1:0)+(i.doneAt?2:0),0);
   // Das Kaufgedächtnis muss mit hinein: "Zuletzt gekauft", die Kostenkarte und die
@@ -2097,7 +2101,7 @@ function viewSig(){
   // sonst keinen Ausweis und zeichnet nicht neu. Und today(), weil die Fälligkeit
   // am Datum hängt – sonst steht bei über Mitternacht offener App der Stand von gestern.
   const preise = (p) => { let n=0, u=0; for(const k in (p||{})){ n++; u += (p[k] && p[k].updatedAt) || 0; } return n+":"+u; };
-  return [S.phase, S.tab, S.modal, S.floor, S.syncState, S.err, S.toast, S.sortByStore, S.draft.cat,
+  return [S.phase, S.tab, S.modal, S.modalBack, S.floor, S.syncState, S.err, S.toast, S.sortByStore, S.draft.cat,
     preise(S.prices), today(),
     Object.keys(S.zu).filter(k=>S.zu[k]).join(","),
     S.taskId, Object.keys(S.prodSel).filter(k=>S.prodSel[k]).join(","),
@@ -2892,7 +2896,8 @@ function modalItem(){
   const e = priceInfo(i.name);
   const known = e ? Object.keys(e.byStore).sort((x,y)=>e.byStore[x].price-e.byStore[y].price) : [];
   return '<div class="modal" id="backdrop"><div class="sheet">'
-   + '<div class="top"><span class="ttl">Artikel</span><button class="x" id="closeItem">✕</button></div>'
+   + '<div class="top"><span class="ttl">Artikel</span><button class="x" id="closeItem">'
+     + (S.modalBack ? '‹' : '✕') + '</button></div>'
    + '<input id="itName" class="field" style="width:100%;height:48px" value="'+esc(S.editName)+'" maxlength="60">'
    + '<div style="margin-top:14px"><label class="lbl">Preis</label>'
      + '<div class="row"><input id="itPrice" class="field" style="height:44px;width:150px" inputmode="decimal" '
@@ -3167,6 +3172,7 @@ function wireMain(){
     S.editPrice = it.price!=null ? String(it.price).replace(".",",") : "";
     S.editStore = it.store || null;
     S.editCat = it.cat || guessCat(it.name);
+    S.modalBack = (S.modal === "prices") ? "prices" : null;   // Rückweg merken
     S.modal="item";
     // Alternativen brauchen die Preisdatei – beim ersten Öffnen kurz nachladen
     if(!srvOn() && !pdIndex){
@@ -3473,7 +3479,7 @@ function modalRoomTasks(){
 
 function wireModal(){
   const bd=$("#backdrop");
-  if(bd) bd.onclick = e => { if(e.target===bd){ S.modal=null; render(); } };
+  if(bd) bd.onclick = e => { if(e.target===bd){ if(S.modal==="item") schliesseItem(); else S.modal=null; render(); } };
 
   // --- Räume verwalten ---
   const osrv=$("#openSrv"); if(osrv) osrv.onclick=()=>{ S.srvNote=null; S.modal="server"; render(); };
@@ -3699,7 +3705,7 @@ function wireModal(){
   const crt=$("#closeRT"); if(crt) crt.onclick=()=>{ S.modal=null; render(); };
 
   // --- Artikel bearbeiten ---
-  const ci2=$("#closeItem"); if(ci2) ci2.onclick=()=>{ S.modal=null; render(); };
+  const ci2=$("#closeItem"); if(ci2) ci2.onclick=()=>{ schliesseItem(); render(); };
   const inm=$("#itName"); if(inm) inm.oninput = () => { S.editName = inm.value; };
   const ipr=$("#itPrice"); if(ipr) ipr.oninput = () => { S.editPrice = ipr.value; };
   document.querySelectorAll("[data-istore]").forEach(b => b.onclick = () => {
@@ -3719,7 +3725,7 @@ function wireModal(){
     const p = passendesProdukt(it); if(!p) return;
     const name = p.name + (p.unit ? " ("+p.unit+")" : "");
     const id = S.itemId;
-    S.modal = null;
+    schliesseItem();
     await updateItems("shopping", list => list.map(x => x.id===id
       ? Object.assign({}, x, { name, price:p.best.price, store:p.best.store||null, size:p.unit||null,
           cat:p.cat||guessCat(p.name), bio:!!p.bio, regional:!!p.regional, updatedAt:now() })
@@ -3734,7 +3740,7 @@ function wireModal(){
     if(!a) return;
     const name = a.h.name + (a.h.unit ? " ("+a.h.unit+")" : "");
     const id = S.itemId;
-    S.modal = null;
+    schliesseItem();
     await updateItems("shopping", list => list.map(x => x.id===id
       ? Object.assign({}, x, { name, price:a.h.best.price, store:a.h.best.store||null,
           size:a.h.unit||null, cat:a.h.cat||guessCat(a.h.name),
@@ -3752,7 +3758,7 @@ function wireModal(){
     const price=parseEuro(S.editPrice);
     const store=S.editStore||null;
     const cat=S.editCat || it.cat || guessCat(name);
-    S.modal=null;
+    schliesseItem();
     await updateItems("shopping", list => list.map(x => x.id===id
       ? Object.assign({}, x, {name, price, store, cat, updatedAt:now()}) : x));
     if(price!=null || store) rememberPrice(name, price, store);
@@ -3761,7 +3767,7 @@ function wireModal(){
   const di=$("#doneItem"); if(di) di.onclick = async () => {
     if(di.dataset.busy) return;
     di.dataset.busy = "1";
-    const id=S.itemId; S.modal=null;
+    const id=S.itemId; schliesseItem();
     // Namen und Richtung unter der Sperre bestimmen, nicht aus einem alten Schnappschuss:
     // zwischen Klick und Schreiben kann ein Sync den Artikel umbenannt oder gelöscht haben.
     let gekauft = null;
@@ -3775,7 +3781,7 @@ function wireModal(){
     if(gekauft) await noteBought(gekauft);
   };
   const dli=$("#delItem"); if(dli) dli.onclick = async () => {
-    const id=S.itemId; S.modal=null;
+    const id=S.itemId; schliesseItem();
     await updateItems("shopping", list => list.map(x => x.id===id
       ? Object.assign({}, x, {deleted:true, updatedAt:now()}) : x));
   };

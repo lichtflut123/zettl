@@ -3518,7 +3518,18 @@ try {
   if (!zeile) throw new Error("Artikelzeile im Preise-Dialog ist nicht anklickbar");
   zeile.dispatchEvent(new w.Event("click", { bubbles: true })); await sleep(600);
   if (!$(w, "#saveItem")) throw new Error("Antippen öffnet den Artikel-Dialog nicht");
-  ok("Agent 160 – Artikel im Preise-Dialog öffnen den Artikel-Dialog");
+  // Rückweg: aus dem Preise-Dialog gekommen, also muss der Knopf zurückführen
+  if ($(w, "#closeItem").textContent.trim() !== "‹") throw new Error("Kein Zurück-Pfeil, obwohl aus dem Preise-Dialog gekommen");
+  click(w, "#closeItem"); await sleep(400);
+  if (!$(w, "#closePrices")) throw new Error("Schließen führt nicht zurück in den Preise-Dialog");
+  if ($(w, "#saveItem")) throw new Error("Artikel-Dialog steht noch offen");
+  // Aus der Liste geöffnet muss es dagegen beim Schließen in die Liste gehen
+  click(w, "#closePrices"); await sleep(300);
+  openItem(w, "Reis"); await sleep(600);
+  if ($(w, "#closeItem").textContent.trim() !== "✕") throw new Error("Zurück-Pfeil, obwohl aus der Liste gekommen");
+  click(w, "#closeItem"); await sleep(300);
+  if ($(w, "#saveItem") || $(w, "#closePrices")) throw new Error("Schließen führt nicht in die Liste");
+  ok("Agent 160 – Preise-Dialog: Artikel anklickbar, und der Weg führt zurück");
 } catch (e) { bad("Agent 160", e); }
 
 // ---------------- Agent 161: Mehr als fünf Alternativen, in einem scrollbaren Bereich
