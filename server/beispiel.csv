@@ -1,0 +1,9 @@
+name;brand;unit;store;price;image;offer
+Speisesalz jodiert;Bad Ischler;500 g;Hofer;0,59;;false
+Speisesalz jodiert;Bad Ischler;500 g;Billa;0,79;;false
+Speisesalz jodiert;Bad Ischler;500 g;Spar;0,75;;false
+Meersalz grob;Clever;1 kg;Billa;0,99;;false
+Haushaltszucker;Wiener Zucker;1 kg;Hofer;1,29;;false
+Haushaltszucker;Wiener Zucker;1 kg;Billa;1,49;;true
+Vollmilch 3,5%;Schärdinger;1 l;Hofer;1,19;;false
+Vollmilch 3,5%;Schärdinger;1 l;Billa;1,39;;false

@@ -1,0 +1,64 @@
+diff --git a/stores/dm.js b/stores/dm.js
+index d2d3f2f..9bfc6a7 100644
+--- a/stores/dm.js
++++ b/stores/dm.js
+@@ -11,21 +11,54 @@ const units = {
+     undefined: { unit: "stk", factor: 1 },
+ };
+ 
++// Since 2025 the crawl API no longer returns a top-level `price` object.
++// Price and base price moved into `tileData`. Read the new shape, fall back
++// to the old one so older cached responses keep working.
++function readPrice(item) {
++    if (item.price && item.price.value) return item.price.value;
++    const t = item.tileData || {};
++    if (t.trackingData && typeof t.trackingData.price === "number") return t.trackingData.price;
++    const shown = t.price && t.price.price && t.price.price.current && t.price.price.current.value;
++    if (shown) {
++        const n = parseFloat(String(shown).replace(/[^0-9,.]/g, "").replace(".", "").replace(",", "."));
++        if (!isNaN(n)) return n;
++    }
++    return null;
++}
++
++// "0,1 kg (3,50 € je 1 kg)" -> { quantity: 0.1, unit: "kg" }
++function readQuantity(item) {
++    let quantity = item.netQuantityContent || item.basePriceQuantity;
++    let unit = item.contentUnit || item.basePriceUnit;
++    if (quantity && unit) return { quantity, unit };
++
++    const infos = ((item.tileData || {}).price || {}).tileInfos || [];
++    for (const info of infos) {
++        const m = String(info).match(/^\s*([0-9]+(?:[.,][0-9]+)?)\s*([a-zA-ZäöüÄÖÜ]+)/);
++        if (m) return { quantity: parseFloat(m[1].replace(",", ".")), unit: m[2].toLowerCase() };
++    }
++    // Fall back to the size that dm appends to the title, e.g. "..., 100 g"
++    const title = ((item.tileData || {}).title || {}).tileHeadline || item.title || "";
++    const m2 = String(title).match(/,\s*([0-9]+(?:[.,][0-9]+)?)\s*([a-zA-ZäöüÄÖÜ]+)\s*$/);
++    if (m2) return { quantity: parseFloat(m2[1].replace(",", ".")), unit: m2[2].toLowerCase() };
++    return { quantity: undefined, unit: undefined };
++}
++
+ exports.getCanonical = function (item, today) {
++    const price = readPrice(item);
+     // Skip items without price
+-    if (!item.price || !item.price.value) {
++    if (price == null) {
+         return null;
+     }
+ 
+-    let quantity = item.netQuantityContent || item.basePriceQuantity;
+-    let unit = item.contentUnit || item.basePriceUnit;
++    const { quantity, unit } = readQuantity(item);
+     return utils.convertUnit(
+         {
+             id: "" + item.gtin,
+             name: `${item.brandName} ${item.title}`,
+             // description: "", not available
+-            price: item.price.value,
+-            priceHistory: [{ date: today, price: item.price.value }],
++            price,
++            priceHistory: [{ date: today, price }],
+             unit,
+             quantity,
+             ...((item.brandName === "dmBio" || (item.name && /^Bio[ -]/.test(item.name))) && { bio: true }),

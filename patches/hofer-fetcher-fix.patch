@@ -1,0 +1,96 @@
+diff --git a/stores/hofer.js b/stores/hofer.js
+index 70372b3..f7f539b 100644
+--- a/stores/hofer.js
++++ b/stores/hofer.js
+@@ -16,6 +16,12 @@ exports.getCanonical = function (item, today) {
+     const name = item.productName;
+     let [quantity, unit] = utils.parseUnitAndQuantityAtEnd(name);
+ 
++    // The product shape changed: unitType/unit/isBio are gone. What is left is
++    // displayUnit ("Stück", "Packung") and priceUnitType ("Kg"), and organic
++    // products are only recognisable by their name.
++    const fallbackUnit = item.unitType || item.priceUnitType || item.displayUnit;
++    const bio = item.isBio !== undefined ? item.isBio : /(^|\s)bio([\s-]|$)/i.test(name);
++
+     return utils.convertUnit(
+         {
+             id: item.productID,
+@@ -24,16 +30,18 @@ exports.getCanonical = function (item, today) {
+             price: item.price,
+             priceHistory: [{ date: today, price: item.price }],
+             isWeighted: item.isBulk,
+-            unit: !unit ? item.unitType : unit,
+-            quantity: !quantity ? item.unit : quantity,
+-            bio: item.isBio,
++            unit: !unit ? fallbackUnit : unit,
++            // item.unit no longer exists; a piece good without a size in its
++            // name is simply one unit, otherwise the quantity ends up NaN
++            quantity: quantity || item.unit || 1,
++            bio,
+             url: `${item.categorySEOName}/${item.sEOName}`,
+         },
+         units,
+         "hofer",
+         {
+-            quantity: item.unit,
+-            unit: item.unitType,
++            quantity: item.unit || 1,
++            unit: fallbackUnit,
+         }
+     );
+ };
+@@ -50,22 +58,31 @@ const TOKEN_DATA = {
+     UserSelectedShops: [],
+ };
+ const ITEMS = HOFER_BASE_URL + `/productlist/CategoryProductList`;
++const PROVIDER_CODE = "hofer";
++const PAGE_SIZE = 2000;
+ 
+ exports.fetchData = async function () {
+     const { subCategories } = await exports.getCategories();
+ 
++    // The old paging (POST /productlist/GetProductList) is gone; that route now
++    // needs a full user session object. additionalCategoryProductList returns a
++    // whole category in one request instead, which is also gentler on the API.
+     let hoferItems = [];
+     for (let subCategory of subCategories) {
+-        let categoryData = (await axios.get(`${ITEMS}?progId=${subCategory.ProgID}&firstLoadProductListResultNum=4&listResultProductNum=24`, CONFIG))
+-            .data;
+-        const numPages = categoryData.ProductListResults[0].ListContext.TotalPages;
+-
+-        for (let iPage = 1; iPage <= numPages; iPage++) {
+-            let items = (
+-                await axios.post(`${HOFER_BASE_URL}/productlist/GetProductList`, { CategoryProgId: subCategory.ProgID, Page: iPage }, CONFIG)
+-            ).data;
+-            hoferItems = hoferItems.concat(items.ProductList);
++        const url =
++            `${HOFER_BASE_URL}/productlist/additionalCategoryProductList` +
++            `?progIdList=${encodeURIComponent(subCategory.ProgID)}` +
++            `&listResultProductNum=${PAGE_SIZE}&providerCode=${PROVIDER_CODE}&isOwnWebshop=false`;
++        const data = (await axios.get(url, CONFIG)).data;
++        for (const result of data.ProductListResults || []) {
++            const query = result.ProductQueryResultDto || {};
++            const list = query.ProductList || result.ProductList || [];
++            hoferItems = hoferItems.concat(list);
++            if (query.TotalItems && list.length < query.TotalItems) {
++                console.warn(`HOFER category ${subCategory.ProgID}: got ${list.length} of ${query.TotalItems} items, raise PAGE_SIZE.`);
++            }
+         }
++        await new Promise((resolve) => setTimeout(resolve, 250));
+     }
+ 
+     return hoferItems;
+@@ -79,8 +96,11 @@ exports.getCategories = async () => {
+     ).headers["jwt-auth"];
+     CONFIG.headers.authorization = "Bearer " + token;
+ 
+-    // concat all subcategories (categories.[i].ChildList)
+-    const categories = (await axios.post(CATEGORIES, {}, CONFIG)).data;
++    // The endpoint switched from POST to GET and now requires providerCode and
++    // isOwnWebshop. Without them the service answers 500.
++    const categories = (
++        await axios.get(`${CATEGORIES}?providerCode=${PROVIDER_CODE}&isOwnWebshop=false`, CONFIG)
++    ).data;
+     const subCategories = categories.reduce((acc, category) => acc.concat(category.ChildList), []);
+     return { categories, subCategories };
+ };

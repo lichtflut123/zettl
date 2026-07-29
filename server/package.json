@@ -1,0 +1,15 @@
+{
+  "name": "zettl-server",
+  "version": "1.0.0",
+  "description": "Preis-Server für die Zettl-Haushalts-App (heisse-preise + Open Food Facts)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "import": "node import-heissepreise.js http://localhost:8080 lokal-test",
+    "import-opendata": "node import-opendata.js http://localhost:8080 lokal-test --katalog=400",
+    "import-csv": "node import-csv.js beispiel.csv http://localhost:8080 lokal-test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

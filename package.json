@@ -1,0 +1,16 @@
+{
+  "name": "zettl",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zettl – Haushalts- und Einkaufs-App für zwei Personen",
+  "type": "module",
+  "scripts": {
+    "test": "node test/agenten.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}
