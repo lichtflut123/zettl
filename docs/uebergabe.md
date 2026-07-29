@@ -27,6 +27,34 @@ mit rund 200 Vorschlägen, Produktvorschläge je Aufgabe, Grundriss-Editor mit S
 **Technik**: Ende-zu-Ende verschlüsselt, Sync über eigene Supabase, Einladungs-Link,
 läuft offline, funktioniert bei gesperrtem Speicher und im Funkloch.
 
+## Nächster Schritt (Stand 29.07.2026, Abend)
+
+**Auslieferungstor: ein Punkt fehlt, dann pushen und hochladen.**
+
+Erledigt: Sperren/Zurücksetzen während des Syncs, Zeitlimit für hängende Anfragen,
+sichtbare Speicherfehler, fremder Tresor hält den Sync an.
+
+Offen: **Grabsteine für `plan` und `shops`.** Eine gelöschte Skizze und ein gelöschtes
+Zuhause kommen beim nächsten Sync zurück, weil „nicht vorhanden" nicht von „gelöscht"
+zu unterscheiden ist. Betrifft `syncNow` (Zweige `plan` und `shops`) und die Stellen,
+an denen gelöscht wird. `shops.list` ist bereits über `mergeItems` abgedeckt.
+
+Danach: `git push -u origin master`, dann den Ordner `D:\zettl-netlify-upload` bei
+Netlify ablegen. Beides braucht die GitHub- bzw. Netlify-Anmeldung des Nutzers.
+
+**Arbeitsweise, im Grilling am 29.07. festgelegt:** `npm run schnell` (1,3 s, gegen die
+echten Artikel) nach jeder Einzeländerung, `npm test` (171 Agenten, 8–10 min) vor jedem
+Commit. Für jeden Bereich vorher ein Test, der ohne die Reparatur rot ist – wo jsdom das
+nicht hergibt (Layout, Ziehen), dazuschreiben statt einen Test erfinden.
+
+**Der volle Prüfbericht** mit 85 Funden aus 19 Agenten liegt unter
+`…\tasks\wkb9fcmda.output` (Sitzungsordner). Rund 55 echte Defekte, nach Schwere
+geordnet; abgearbeitet sind bisher die Suche, der Plan-Tab und der Sync-Cluster.
+Offen unter anderem: `vergessenAt` kommt beim Sync zurück, Sparplan-Zahlen mischen
+Packungspreise mit mengenbereinigten Ersparnissen, Barrierefreiheit, und die
+**ungemessene Leistungsfrage** – lineare Suche über 52.000 Einträge bei jedem
+Tastendruck, volles Neuzeichnen bei jedem Toast.
+
 ## Offen – wichtig
 
 1. **Preisdatei aktualisiert sich nicht selbst.** Aktuell erzeugt Claude sie auf Zuruf
