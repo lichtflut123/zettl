@@ -249,7 +249,7 @@ function catIcon(k, size){
 
 // Erkennt die Warengruppe aus dem Artikelnamen (österreichischer Sprachgebrauch)
 const CAT_WORDS = [
-  ["obst", ["apfel","äpfel","banan","birne","orange","mandarin","zitron","limette","traub","erdbeer","himbeer","heidelbeer","brombeer","kirsch","marille","pfirsich","nektarin","zwetschk","pflaume","melone","ananas","mango","kiwi","avocado","tomat","gurke","salat","paprika","zwiebel","knoblauch","karotte","möhre","kartoffel","erdapfel","zucchini","melanzani","aubergin","brokkoli","karfiol","blumenkohl","spinat","kraut","kohl","lauch","porree","sellerie","radieschen","rettich","kürbis","mais","bohnen","erbsen","pilz","champignon","kräuter","petersilie","basilikum","schnittlauch","rucola","ingwer","obst","gemüse","oliven"]],
+  ["obst", ["apfel","äpfel","banan","birne","orange","mandarin","zitron","limette","traub","erdbeer","himbeer","heidelbeer","brombeer","kirsch","marille","pfirsich","nektarin","zwetschk","pflaume","melone","ananas","mango","kiwi","avocado","tomat","gurke","salat","paprika","zwiebel","knoblauch","karotte","möhre","kartoffel","erdapfel","paradeiser","ribisel","zwetschk","fisolen","zucchini","melanzani","aubergin","brokkoli","karfiol","blumenkohl","spinat","kraut","kohl","lauch","porree","sellerie","radieschen","rettich","kürbis","mais","bohnen","erbsen","pilz","champignon","kräuter","petersilie","basilikum","schnittlauch","rucola","ingwer","obst","gemüse","oliven"]],
   ["backwaren", ["brot","semmel","weckerl","kipferl","croissant","gebäck","baguette","toast","brötchen","striezel","brioche","laugen","knäcke","zwieback","kuchen","torte","strudel","germknödel","donut","muffin","zimtfächer","focaccia"]],
   ["fleisch", ["fleisch","faschiert","hack","schnitzel","steak","huhn","hendl","pute","truthahn","speck","schinken","wurst","salami","leberkäs","bratwurst","würstel","frankfurter","debreziner","kotelett","filet","gulasch","braten","lachs","fisch","thunfisch","forelle","garnele","shrimp","surimi"]],
   ["kuehl", ["milch","joghurt","topfen","quark","butter","margarine","sahne","rahm","schlagobers","obers","käse","mozzarella","parmesan","gouda","emmentaler","feta","frischkäse","burrata","ricotta","mascarpone","ei ","eier","aufstrich","hummus","tzatziki","pudding","skyr","buttermilch","kefir","creme fraiche","crème fraîche"]],
@@ -1897,24 +1897,45 @@ const PD_W = {
   WORTE:  12,   // Wortabdeckung
   BEI:     4, BEIMAX: 20,   // Abzug je überzähligem Beiwort
   KAT:    40,   // Abzug bei fremder Warengruppe aus dem Datensatz
-  KAT2:   25    // Abzug, wenn der Name eine andere Warengruppe nahelegt
+  KAT2:   25,   // Abzug, wenn der Name eine andere Warengruppe nahelegt
+  SYN:    18    // Abzug für Synonyme – das getippte Wort selbst gewinnt
 };
+// Abgewertet wird nur, wenn die Warengruppe des SUCHWORTS sicher ist. guessCat
+// sucht Teilzeichenketten: "Paradeiser" enthält "eis" und gälte als Tiefkühl,
+// "Preiselbeeren" enthält "reis" und gälte als Vorrat. Ein Abzug auf dieser
+// Grundlage bestraft ausgerechnet die Artikel, die richtig einsortiert sind –
+// gemessen fiel "Ja! Natürlich Bio Paradeiser" damit von Platz 1 auf Platz 20.
+// Deshalb hier nur ganze Wörter, und im Zweifel "sonst": dann wirkt gar kein Abzug.
+function katFuerSuche(q){
+  const worte = norm(q).split(" ").filter(Boolean);
+  let cat = "sonst", score = 0;
+  for(const [c, words] of CAT_WORDS_N) for(const w of words){
+    const ww = w.trim();
+    if(!worte.some(t => t === ww)) continue;
+    if(ww.length*2 > score){ score = ww.length*2; cat = c; }
+  }
+  return cat;
+}
 function pdSuche(q, max){
   if(!pdIndex || !pdIndex.length) return [];
   const roh = norm(q).split(" ").filter(Boolean);
   if(!roh.length) return [];
-  const gruppen = roh.map(w => PD_SYN[w] ? PD_SYN[w].map(norm) : [w]);
-  const katQ = guessCat(q);
+  // Synonyme sind ein Ersatz, kein Gleichrangiges. "Paradeiser" steht in neun
+  // Artikeln, das Synonym "Tomate" in 222 – ohne Abzug erschlagen die Tomaten-
+  // produkte die echten Paradeiser. Wo das getippte Wort selbst vorkommt, gewinnt es.
+  const gruppen = roh.map(w => ({ orig: w, worte: PD_SYN[w] ? PD_SYN[w].map(norm) : [w] }));
+  const katQ = katFuerSuche(q);
   const treffer = [];
   for(const e of pdIndex){
     const k = e.w.length;
     let s = 0, abdeckung = 0, worte = 0, ok = true;
     for(const gruppe of gruppen){
       let best = -1, len = 0;
-      for(const w of gruppe){
+      for(const w of gruppe.worte){
+        const abzug = (w === gruppe.orig) ? 0 : PD_W.SYN;
         if(e.n.indexOf(w) < 0) continue;               // Vorfilter wie bisher
         if(e.n === w){
-          const p = PD_W.EXAKT + PD_W.POS;
+          const p = PD_W.EXAKT + PD_W.POS - abzug;
           if(p > best){ best = p; len = w.length; }
           continue;
         }
@@ -1928,7 +1949,7 @@ function pdSuche(q, max){
           else if(j + w.length === t.length) art = (w.length >= 4 ? PD_W.KOPF : PD_W.MITTE);
           else if(j === 0) art = PD_W.BEST;
           else art = PD_W.MITTE;
-          const p = art + Math.round(PD_W.POS * (k > 1 ? i/(k-1) : 1));
+          const p = art + Math.round(PD_W.POS * (k > 1 ? i/(k-1) : 1)) - abzug;
           if(p > best){ best = p; len = w.length; }
         }
       }
@@ -3480,7 +3501,10 @@ function wirePlan(){
     const box = e.target.closest && e.target.closest("[data-rid]");
     if(!box) return;
     const id = box.getAttribute("data-rid");
-    const room = S.rooms.find(r => r.id===id) || layoutFloor(S.planFloor).find(r => r.id===id);
+    // layoutFloor zuerst: es vergibt Rasterplätze für Räume, die noch nie von Hand
+    // gesetzt wurden. S.rooms.find trifft zwar immer, aber mit x/y undefined –
+    // dann rechnet das Ziehen mit NaN und der Raum lässt sich nie positionieren.
+    const room = layoutFloor(S.planFloor).find(r => r.id===id) || S.rooms.find(r => r.id===id);
     if(!room) return;
     const rect = cv.getBoundingClientRect();
     drag = { id, box, mode: handle ? "size" : "move", p: point(e), rect,

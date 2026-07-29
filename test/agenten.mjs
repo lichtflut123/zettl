@@ -3658,6 +3658,11 @@ const PRUEF = [
   { q: "Zucker",   nicht: ["ohne zucker"] },
   { q: "Eier",     nicht: ["rostfrei","hautschere","eier-salat"] },
   { q: "Erdäpfel", nicht: ["chips","dippers"] },
+  // Österreichische Wörter, die Teilzeichenketten anderer Warengruppen enthalten:
+  // "Paradeiser" enthält "eis", "Preiselbeeren" enthält "reis". Solange die
+  // Warengruppen-Abwertung darauf hereinfiel, fielen echte Paradeiser auf Platz 20.
+  { q: "Paradeiser",    nicht: ["pizza","fertig","ketchup"], muss: "paradeiser" },
+  { q: "Preiselbeeren", nicht: ["reisgericht","risotto"],    muss: "preiselbeer" },
   { q: "Klopapier",   nicht: [], muss: "toilettenpapier" },   // Kontrollfall: Synonym
   { q: "Waschmittel", nicht: [] }                             // Kontrollfall: geht heute schon
 ];

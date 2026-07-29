@@ -16,7 +16,12 @@
 - Deutsche Beschriftungen, österreichische Begriffe (Erdäpfel, Topfen, Wagerl).
 - Alle Nutzerdaten sind Ende-zu-Ende verschlüsselt. Nichts im Klartext speichern.
 - Ehrlich bleiben: keine erfundenen Ersparnisse, keine Scheingenauigkeit bei CO₂.
-- Preisabrufe laufen **wöchentlich**, nicht täglich (Festlegung vom 29.07.2026).
+- Preisabrufe: **täglich** gegen den veröffentlichten heisse-preise-Datensatz (Billa, Spar) –
+  dessen Betreiber erlaubt ausdrücklich einen Abruf pro Tag. **Keine** automatischen
+  Eigenabrufe bei roksh/Hofer und dm: dm sperrt den benutzten Endpunkt per `robots.txt`
+  (`Disallow: /`), und bei Hofer wären es 100 % eines fremd beschafften Katalogs.
+  Die vorhandenen Hofer- und dm-Zeilen bleiben beim täglichen Lauf **stehen** – sonst
+  schrumpft die Preisdatei von 52.253 auf 34.372 Artikel. (Festlegung vom 29.07.2026.)
 - `index.html` zählt für graphify als Dokument, nicht als Code: `graphify update .` und der
   Commit-Hook fassen sie **nicht** an. Nach Änderungen an der App braucht der Graph einen
   vollen `/graphify . --update`-Lauf mit semantischer Runde.
