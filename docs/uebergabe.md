@@ -158,8 +158,10 @@ sind Artikel, die vorher **gar keine** Warengruppe hatten und jetzt eine bekomme
 ### Nächster Auftrag: wöchentliche Preisdatei
 
 GitHub Action, die wöchentlich – montags um 4 Uhr – `server/build-preisdatei.js` ausführt
-und die erzeugte `preise.json` ins Repository committet; Hofer und dm über die Patches in
-`patches/` frisch abgerufen.
+und die erzeugte `preise.json` ins Repository committet. Billa und Spar kommen frisch aus
+dem veröffentlichten Datensatz; die vorhandenen **Hofer- und dm-Zeilen bleiben stehen**
+(bekräftigt am 30.07.2026 – keine Eigenabrufe, siehe Regel in CLAUDE.md; die Patches in
+`patches/` bleiben nur als Reparatur-Beleg liegen).
 
 Der Wochenrhythmus ist eine bewusste Festlegung vom 29. Juli 2026 und ersetzt die früher
 geplante tägliche Ausführung. Begründung und Folgen stehen in `server/README.md` unter
