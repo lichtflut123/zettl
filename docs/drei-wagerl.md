@@ -76,7 +76,16 @@ unverändert: Nächste Woche derselbe Druck, frische Preise, angepasste Wagerl.
       `STK_GRAMM` (sichtbare Annahme in kg, ehrliche Verweigerung ohne
       Eintrag), die Verlauf-Chips nutzen die bestehende Rhythmus-Rechnung
       aus zuletztGekauft().
-    - **Etappe 3 – die Haltungshinweise:** CO₂-Tauschliste.
+    - **Etappe 3 – die Haltungshinweise:** CO₂-Tauschliste. **Gebaut am
+      30.07.2026, Wagerl 10 grün.** Sieben kuratierte Paare (`CO2_TAUSCH`),
+      Hinweis nur im Öko-Wagerl, Größenordnungssprache („spart grob die
+      Hälfte"), Tipp tauscht samt Menge; kein Hinweis, wenn der Datensatz
+      das Tauschziel nicht hergibt.
+
+**Namen der drei Wagerl** (Festlegung vom 30.07., nachmittags): **Da Spoarer,
+Da Regionale, Da Öko** – ersetzt „Die günstigste / regionale / Bio-Variante".
+Vermerk: „Da Spoarer" klingt nah an der Ladenkette Spar, die in denselben
+Karten als Laden auftaucht; bewusst so entschieden, Umbenennen ist eine Zeile.
 
 ## Ehrlichkeits-Klausel
 

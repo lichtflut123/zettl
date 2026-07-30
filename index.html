@@ -1169,6 +1169,24 @@ function stkGramm(begriff){
   for(const wort of norm(begriff).split(" ")) if(STK_GRAMM[wort]) return STK_GRAMM[wort];
   return null;
 }
+
+// Entscheidung 13: kuratierte CO₂-Tauschpaare – klein, unstrittig, einsehbar.
+// Die Hinweise sprechen in Größenordnungen, nie in Kommastellen: die Faktoren
+// dahinter sind erklärte Schätzwerte (siehe CO2-Tabelle), keine Messungen.
+// Nur Paare, bei denen die Literatur nicht streitet. Vorschlag, nie Autotausch.
+const CO2_TAUSCH = {
+  butter:      { zu:"Margarine",     text:"spart grob die Hälfte an CO₂" },
+  vollmilch:   { zu:"Haferdrink",    text:"spart grob zwei Drittel an CO₂" },
+  milch:       { zu:"Haferdrink",    text:"spart grob zwei Drittel an CO₂" },
+  rindfleisch: { zu:"Huhn",          text:"spart grob drei Viertel an CO₂" },
+  rind:        { zu:"Huhn",          text:"spart grob drei Viertel an CO₂" },
+  faschiertes: { zu:"Linsen",        text:"spart grob drei Viertel an CO₂" },
+  schlagobers: { zu:"Pflanzenobers", text:"spart grob die Hälfte an CO₂" }
+};
+function co2Tausch(begriff){
+  for(const wort of norm(begriff).split(" ")) if(CO2_TAUSCH[wort]) return CO2_TAUSCH[wort];
+  return null;
+}
 // Menge menschlich: 4000 ml → "4 l", 720 g → "0,72 kg", 6 stk → "6 Stück"
 function mengeText(b){
   if(!b) return "";
@@ -1244,6 +1262,13 @@ function wagerlPosten(v, flag){
     posten.alternative.spart = wahl.alternative.spart;
   }
   if(flag && !markiert) posten.luecke = flag;
+  // CO₂-Hinweis nur in der Bio-Karte (Entscheidung 4) – und nur, wenn der
+  // Datensatz das Tauschziel auch hergibt. Sonst wäre der Vorschlag ein leeres
+  // Versprechen.
+  if(flag === "bio"){
+    const t = co2Tausch(mg.rest);
+    if(t && wagerlKandidaten(t.zu).length) posten.co2 = t;
+  }
   return posten;
 }
 
@@ -3539,7 +3564,8 @@ function modalWagerl(){
 // Die drei Karten unter dem Rechnen-Knopf: je Variante Posten, Summe,
 // Ladenaufteilung und die ehrlichen Lücken (Entscheidung 8).
 function wagerlKarten(){
-  const namen = { guenstig:"Die günstigste", regional:"Die regionale", bio:"Die Bio-Variante" };
+  // Die drei Wagerl heißen seit 30.07. nach Haltung, nicht nach Attribut
+  const namen = { guenstig:"Da Spoarer", regional:"Da Regionale", bio:"Da Öko" };
   const flagText = { regional:"nichts Regionales bekannt", bio:"nichts in Bio bekannt" };
   let h = "";
   for(const k of ["guenstig","regional","bio"]){
@@ -3568,6 +3594,11 @@ function wagerlKarten(){
         z += '<div class="muted" style="margin-top:2px;padding-left:12px">'+esc(mengeText({menge:p.alternative.gesamt, art:(p.ziel||{}).art||"g"}))
           + ' statt '+esc(mengeText(p.ziel))+', spart '+esc(euro(p.alternative.spart))
           + ' · <button class="link" data-wagerl-tausch="'+k+'|'+esc(p.id)+'">tauschen</button></div>';
+      // Entscheidung 13: der Klima-Vorschlag, nur hier im Öko-Wagerl
+      if(p.co2)
+        z += '<div class="muted" style="margin-top:2px;padding-left:12px">🌱 '+esc(p.co2.zu)+' statt '+esc(p.begriff)
+          + ' – '+esc(p.co2.text)
+          + ' · <button class="link" data-wagerl-co2="'+k+'|'+esc(p.id)+'">tauschen</button></div>';
       return z;
     }).join("");
     const laeden = Object.keys(wv.laeden).sort((a,b)=>wv.laeden[b]-wv.laeden[a])
@@ -4041,6 +4072,19 @@ function wireModal(){
     const wv = S.wagerl && S.wagerl[teile[0]]; if(!wv) return;
     const p = wv.posten.find(x => x.id === teile[1]); if(!p || !p.alternative) return;
     p.produkt = p.alternative; delete p.alternative;
+    S.wagerl[teile[0]] = wagerlFasse(wv.posten);
+    render();
+  });
+  // CO₂-Tausch: die Position auf die Nachbar-Produktart umrechnen – Menge bleibt
+  // ("500 g Butter" wird "500 g Margarine"), entschieden hat der Tipp.
+  document.querySelectorAll("[data-wagerl-co2]").forEach(b => b.onclick = () => {
+    const teile = b.getAttribute("data-wagerl-co2").split("|");
+    const wv = S.wagerl && S.wagerl[teile[0]]; if(!wv) return;
+    const i = wv.posten.findIndex(x => x.id === teile[1]); if(i < 0) return;
+    const p = wv.posten[i]; if(!p.co2) return;
+    const mg = p.menge;
+    const name = (mg.wert != null ? mg.wert + " " + (mg.einheit === "stk" ? "Stk" : mg.einheit) + " " : "") + p.co2.zu;
+    wv.posten[i] = wagerlPosten({ id: p.id, name }, "bio");
     S.wagerl[teile[0]] = wagerlFasse(wv.posten);
     render();
   });

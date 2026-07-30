@@ -241,4 +241,28 @@ try {
   ok("Wagerl 9 – Verlauf schlägt vor, ein Tipp übernimmt, kein doppelter Chip");
 } catch (e) { bad("Wagerl 9", e); }
 
+// ---------------- Wagerl 10: CO₂-Tauschhinweise in der Bio-Karte (Entscheidung 13)
+// Kuratierte Paare, Größenordnungssprache, Vorschlag statt Autotausch: die
+// Bio-Karte zeigt bei Butter den Margarine-Hinweis, ein Tipp tauscht die
+// Position samt Menge. Die Günstig-Karte bleibt frei von Klima-Hinweisen.
+try {
+  PREISDATEI.inhalt.artikel.push(["Margarine", 1.29, "Billa", "250 g", 0, 0, 0, "kuehl"]);
+  const { w } = makePhone(); await setup(w);
+  click(w, "#openWagerl"); await sleep(150);
+  type(w, "#vorlageWas", "500 g Butter"); click(w, "#vorlageAdd"); await sleep(250);
+  click(w, "#wagerlRechnen");
+  await until(() => $(w, '[data-wagerl="bio"]'), "Wagerl-Karten");
+  let b = $(w, '[data-wagerl="bio"]').textContent;
+  const g = $(w, '[data-wagerl="guenstig"]').textContent;
+  if (!b.includes("Margarine statt Butter")) throw new Error("CO₂-Hinweis fehlt in der Bio-Karte");
+  if (!b.includes("grob die Hälfte")) throw new Error("Hinweis spricht nicht in Größenordnungen");
+  if (g.includes("Margarine statt")) throw new Error("Klima-Hinweis steht in der falschen Karte");
+  const co2 = $(w, "[data-wagerl-co2]");
+  if (!co2) throw new Error("Hinweis ist nicht antippbar");
+  co2.dispatchEvent(new w.Event("click", { bubbles: true })); await sleep(300);
+  b = $(w, '[data-wagerl="bio"]').textContent;
+  if (!b.includes("2 × Margarine")) throw new Error("Tausch übernimmt die Menge nicht (500 g → 2 × 250 g): " + b.slice(0, 200));
+  ok("Wagerl 10 – CO₂-Tausch: Hinweis nur in der Bio-Karte, Größenordnung, Tipp tauscht samt Menge");
+} catch (e) { bad("Wagerl 10", e); }
+
 fazit();
