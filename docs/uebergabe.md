@@ -42,10 +42,19 @@ Gepusht als Erstpush nach Historien-Bereinigung (die echte Supabase-Adresse stan
 in sechs Altcommits); hochgeladen wird der Ordner `D:\zettl-netlify-upload` bei Netlify –
 das braucht die Netlify-Anmeldung des Nutzers.
 
-**Arbeitsweise, im Grilling am 29.07. festgelegt:** `npm run schnell` (1,3 s, gegen die
-echten Artikel) nach jeder Einzeländerung, `npm test` (178 Agenten, 8–10 min) vor jedem
-Commit. Für jeden Bereich vorher ein Test, der ohne die Reparatur rot ist – wo jsdom das
-nicht hergibt (Layout, Ziehen), dazuschreiben statt einen Test erfinden.
+**Arbeitsweise, nachgeschärft am 30.07.:** `npm run schnell` (1,3 s, gegen die echten
+Artikel) nach jeder Einzeländerung, die **Bereichs-Agenten** (`npm run wagerl`) vor jedem
+Commit, die **volle Suite** (`npm test`, 8–10 min) am Etappenende und vor jedem Push.
+Für jeden Bereich vorher ein Test, der ohne die Reparatur rot ist – wo jsdom das nicht
+hergibt (Layout, Ziehen), dazuschreiben statt einen Test erfinden. Gebaut wird solo;
+Subagenten nur an Etappen-Enden (Audit) oder auf Ansage. Das gemeinsame Test-Geschirr
+liegt in `test/harness.mjs`.
+
+**Nächstes Bauvorhaben: „Drei Wagerl"** – ein Zettel aus Oberbegriffen mit Mengen wird
+in drei fertige Einkaufsvarianten aufgelöst (günstig – regional – bio). Konzept samt
+14 Entscheidungen aus dem Grill-Durchgang: `docs/drei-wagerl.md`. Etappe 1 (Gerüst)
+ist begonnen; Entscheidung 11 (Vorlage als zweite Liste, Zettel bleibt der heutige)
+gilt probeweise und wird nach Etappe 1 erneut gegrillt.
 
 **Der volle Prüfbericht** mit 85 Funden aus 19 Agenten liegt unter
 `…\tasks\wkb9fcmda.output` (Sitzungsordner). Rund 55 echte Defekte, nach Schwere

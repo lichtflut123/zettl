@@ -689,10 +689,10 @@ const DEFAULT_ROOMS = [
 const LS = {
   vault:"zettl.vault", members:"zettl.members", shopping:"zettl.shopping",
   tasks:"zettl.tasks", prices:"zettl.prices", rooms:"zettl.rooms",
-  plan:"zettl.plan", shops:"zettl.shops",
+  plan:"zettl.plan", shops:"zettl.shops", vorlage:"zettl.vorlage",
   me:"zettl.me", key:"zettl.key", sync:"zettl.sync"
 };
-const REMOTE_KEYS = ["vault","members","rooms","shopping","tasks","prices","plan","shops"];
+const REMOTE_KEYS = ["vault","members","rooms","shopping","tasks","prices","plan","shops","vorlage"];
 const GRID = 20;                       // Raster des Grundrisses (20 x 20 Felder)
 
 // ---------------------------------------------------------------- Utils
@@ -716,6 +716,25 @@ function today(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMon
 // mit toISOString() zeigte die Grenze zwischen Mitternacht und zwei Uhr früh auf
 // den Vortag und schnitt beim Zusammenführen den falschen Tag weg.
 function tagVon(ms){ const d=new Date(ms); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+
+// Menge aus einer Vorlagen-Position lesen: "3 l Milch" → 3 l + "Milch",
+// "6 Bananen" → 6 stk + "Bananen". Nur eine FÜHRENDE Zahl zählt – "Emmentaler 45%"
+// hat keine Menge. Eine nackte Zahl vor einem Wort heißt Stück, aber nur ganzzahlig:
+// "1,5 Milch" wäre keine Stückzahl, sondern ein Tippfehler, und bleibt Name.
+// (Konzept: docs/drei-wagerl.md, Entscheidung 2.)
+function vorlageMenge(text){
+  const t = String(text||"").trim();
+  let m = t.match(/^(\d+(?:[.,]\d+)?)\s*(ml|l|kg|g|stück|stueck|stk|st\.?)\s+(.+)$/i);
+  if(m){
+    const wert = parseFloat(m[1].replace(",", "."));
+    let einheit = m[2].toLowerCase().replace(/\.$/,"");
+    if(einheit==="st" || einheit==="stück" || einheit==="stueck") einheit = "stk";
+    return { wert, einheit, rest: m[3].trim() };
+  }
+  m = t.match(/^(\d+)\s+(\D.+)$/);
+  if(m) return { wert: parseInt(m[1], 10), einheit: "stk", rest: m[2].trim() };
+  return { wert: null, einheit: null, rest: t };
+}
 function addDays(iso,n){ const d=new Date(iso+"T00:00:00"); d.setDate(d.getDate()+n); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function dayDiff(iso){ if(!iso) return null; return Math.round((new Date(iso+"T00:00:00") - new Date(today()+"T00:00:00"))/86400000); }
 // "Stand 11/2025", wenn ein Preis nicht mehr frisch ist
@@ -772,7 +791,7 @@ const S = {
   itemId:null, editName:"", editPrice:"", editCat:null, editStore:null,
   roomEditId:null, reName:null, reType:null, reFloor:null, reErr:null, roomPrefillFloor:null,
   tTitle:null, tRoom:null, tRep:null, tDue:null,
-  plan:{bg:{}}, shops:{home:null, list:[]}, planFloor:null, planEdit:false, planRoom:null,
+  plan:{bg:{}}, shops:{home:null, list:[]}, vorlage:[], planFloor:null, planEdit:false, planRoom:null,
   shopBusy:false, shopErr:null, placeHits:null, placeBusy:false,
   prodHits:null, prodHitsQ:null, prodBusy:false, srvNote:null, mehrTreffer:false,
   pref:{ bio:false, regional:false, co2:true }, sparBusy:false, zu:{}, altBusy:false, connectErr:null, connectBusy:false, floor:null,
@@ -968,7 +987,7 @@ async function syncNow(silent){
       throw new Error("In der Datenbank liegt ein anderer Haushalt. Sync angehalten, damit nichts überschrieben wird. "
         + "Entweder das ursprüngliche Passwort verwenden, oder unter ⚙ eine neue Datenbank eintragen.");
 
-    for(const name of ["members","rooms","shopping","tasks","prices","plan","shops"]){
+    for(const name of ["members","rooms","shopping","tasks","prices","plan","shops","vorlage"]){
       if(S.key !== key0) throw new Error("Abgebrochen – der Haushalt wurde zwischendurch gesperrt.");
       let theirsRaw = await remoteGet(name);          // Netzwerk außerhalb der Sperre
       let theirs = null;
@@ -1025,6 +1044,7 @@ async function syncNow(silent){
       else if(name==="members") S.members=merged;
       else if(name==="rooms") S.rooms=merged;
       else if(name==="shopping") S.shopping=merged;
+      else if(name==="vorlage") S.vorlage=merged;
       else S.tasks=merged;
       });
 
@@ -1068,6 +1088,18 @@ async function updateRooms(fn){
     const next = fn(cur);
     S.rooms = next;
     await writeLocal("rooms", next);
+    render();
+  });
+  if(syncOn()) syncNow(true);
+}
+// Die Vorlage: Oberbegriffe mit Menge ("3 l Milch"), aus denen Drei Wagerl die
+// Einkaufsvarianten rechnet. Eine ganz normale mitsyncte Liste mit Grabsteinen.
+async function updateVorlage(fn){
+  await withLock(async () => {
+    const cur = await readLocal("vorlage", []);
+    const next = fn(cur);
+    S.vorlage = next;
+    await writeLocal("vorlage", next);
     render();
   });
   if(syncOn()) syncNow(true);
@@ -1749,6 +1781,7 @@ async function loadAll(){
   if(!S.plan.bg) S.plan.bg = {};
   S.shops    = await readLocal("shops", {home:null, list:[]}) || {home:null, list:[]};
   if(!S.shops.list) S.shops.list = [];
+  S.vorlage  = await readLocal("vorlage", []);
   S.meId     = lsGet(LS.me, null);
   // Ältere Installationen kennen noch keine Räume: Standardräume nachtragen
   // und dabei Räume übernehmen, die schon in Aufgaben vorkommen.
@@ -2493,6 +2526,7 @@ function viewMain(){
     + (S.modal==="task" ? modalTask() : "")
     + (S.modal==="roomtasks" ? modalRoomTasks() : "")
     + (S.modal==="shops" ? modalShops() : "")
+    + (S.modal==="wagerl" ? modalWagerl() : "")
     + (S.modal==="server" ? modalServer() : "")
     + (S.modal==="co2" ? modalCo2() : "")
     + (S.modal==="sparen" ? modalSparen() : "")
@@ -2569,8 +2603,12 @@ function co2Card(){
 }
 function listShopping(){
   const items = visible(S.shopping);
+  // Der Wagerl-Knopf muss auch auf dem leeren Zettel stehen – gerade dann
+  // beginnt der Einkauf ja mit der Vorlage statt mit Tippen.
+  const wagerlKnopf = '<button class="btn ghost" id="openWagerl" style="margin-top:12px">Drei Wagerl'
+     + '<span style="opacity:.6;font-weight:400;margin-left:8px">günstig – regional – bio</span></button>';
   if(!items.length) return '<div class="empty"><b>Der Zettel ist leer.</b><span>Tipp unten ein, was ihr braucht – z. B. Milch.</span></div>'
-    + zuletztBlock();
+    + zuletztBlock() + wagerlKnopf;
   const open = items.filter(i=>!i.done), done = items.filter(i=>i.done);
   // Reihenfolge: erst der Einkauf selbst, dann was er kostet. Der Sparen-Knopf
   // bleibt oben – unter der ganzen Liste würde ihn niemand mehr finden.
@@ -2601,6 +2639,7 @@ function listShopping(){
     if(!istZu("w:wagerl")) h += done.map(rowItem).join("");
   }
   h += zuletztBlock();
+  h += wagerlKnopf;
   const summe = basketCard() + co2Card();
   return h + (summe ? '<div class="summe">'+summe+'</div>' : "");
 }
@@ -3276,6 +3315,29 @@ function modalServer(){
    + (srvOn() ? '<button class="link" id="offSrv" style="display:block;margin-top:12px;color:var(--rose)">Server entfernen</button>' : '')
    + '</div></div>';
 }
+// Drei Wagerl: die Vorlage pflegen und (ab Etappe 2 des Konzepts) in drei
+// Einkaufsvarianten auflösen. Konzept: docs/drei-wagerl.md
+function modalWagerl(){
+  const list = (S.vorlage||[]).filter(v => !v.deleted);
+  const rows = list.map(v => {
+    const m = vorlageMenge(v.name);
+    return '<div class="item" style="width:100%;padding-left:14px;display:flex;align-items:center">'
+      + '<span class="grow"><span class="name">'+esc(m.rest)+'</span>'
+      + (m.wert!=null ? '<span class="meta">'+esc(String(m.wert).replace(".",","))+' '+(m.einheit==="stk"?"Stück":esc(m.einheit))+'</span>' : '<span class="meta">Menge aus dem Verlauf</span>')
+      + '</span>'
+      + '<button class="x" data-vorlage-del="'+esc(v.id)+'" style="flex:0 0 auto">✕</button>'
+      + '</div>';
+  }).join("");
+  return '<div class="modal" id="backdrop"><div class="sheet">'
+   + '<div class="top"><span class="ttl">Drei Wagerl</span><button class="x" id="closeWagerl">✕</button></div>'
+   + '<div class="muted">Die Vorlage: was ihr regelmäßig braucht, als Oberbegriff mit Menge. '
+     + 'Sie bleibt stehen – jede Woche derselbe Druck, frische Preise.</div>'
+   + '<div style="margin-top:14px"><label class="lbl">Position</label>'
+   + '<div class="row"><div class="field grow"><input id="vorlageWas" placeholder="z. B. 3 l Milch" autocapitalize="off" autocorrect="off" spellcheck="false"></div>'
+   + '<button class="btn" id="vorlageAdd" style="height:44px;width:auto;padding:0 16px;flex:0 0 auto">Dazu</button></div></div>'
+   + '<div style="margin-top:12px">'+(rows || '<div class="muted">Noch leer. Trag ein, was ihr regelmäßig kauft.</div>')+'</div>'
+   + '</div></div>';
+}
 function modalShops(){
   // Ein Grabstein ({deleted:true}) ist kein Standort
   const home = (S.shops.home && !S.shops.home.deleted && S.shops.home.lat!=null) ? S.shops.home : null;
@@ -3411,6 +3473,8 @@ function wireMain(){
     updateItems("shopping", list => list.map(i => i.done ? Object.assign({},i,{deleted:true, updatedAt:now()}) : i));
     toast("Erledigte entfernt");
   };
+
+  const ow=$("#openWagerl"); if(ow) ow.onclick = () => { S.modal="wagerl"; render(); };
 
   document.querySelectorAll(".mini [data-rid]").forEach(el => el.onclick = () => {
     S.planRoom = el.getAttribute("data-rid"); S.modal="roomtasks"; render(); });
@@ -3701,6 +3765,23 @@ function modalRoomTasks(){
 function wireModal(){
   const bd=$("#backdrop");
   if(bd) bd.onclick = e => { if(e.target===bd){ if(S.modal==="item") schliesseItem(); else S.modal=null; render(); } };
+
+  // --- Drei Wagerl: die Vorlage pflegen ---
+  const cw=$("#closeWagerl"); if(cw) cw.onclick=()=>{ S.modal=null; render(); };
+  const va=$("#vorlageAdd"); if(va) va.onclick = async () => {
+    const el=$("#vorlageWas"), n=(el.value||"").trim(); if(!n) return;
+    // Doppelte am Begriff erkennen, nicht am vollen Text: "3 l Milch" und "Milch"
+    // meinen dieselbe Position. Menge ändern heißt: löschen und neu eintragen.
+    const neu = norm(vorlageMenge(n).rest);
+    if((S.vorlage||[]).some(v => !v.deleted && norm(vorlageMenge(v.name).rest)===neu)){ el.value=""; return; }
+    await updateVorlage(list => list.concat([{ id:uid(), name:n, updatedAt:now() }]));
+    const el2=$("#vorlageWas"); if(el2) el2.focus();
+  };
+  const vw=$("#vorlageWas"); if(vw) vw.onkeydown = e => { if(e.key==="Enter"){ const b=$("#vorlageAdd"); if(b) b.click(); } };
+  document.querySelectorAll("[data-vorlage-del]").forEach(b => b.onclick = () => {
+    const id=b.getAttribute("data-vorlage-del");
+    updateVorlage(list => list.map(v => v.id===id ? Object.assign({}, v, {deleted:true, updatedAt:now()}) : v));
+  });
 
   // --- Räume verwalten ---
   const osrv=$("#openSrv"); if(osrv) osrv.onclick=()=>{ S.srvNote=null; S.modal="server"; render(); };
