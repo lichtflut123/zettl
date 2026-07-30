@@ -712,6 +712,10 @@ const norm = (s) => String(s).trim().toLowerCase()
 const CAT_WORDS_N = CAT_WORDS.map(([c, ws]) => [c, ws.map(norm)]);
 const TASK_PRODUCTS_N = TASK_PRODUCTS.map(([keys, prods]) => [keys.map(norm), prods]);
 function today(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+// Derselbe Tag, aber zu einem Zeitstempel. Muss ortszeitlich rechnen wie today():
+// mit toISOString() zeigte die Grenze zwischen Mitternacht und zwei Uhr früh auf
+// den Vortag und schnitt beim Zusammenführen den falschen Tag weg.
+function tagVon(ms){ const d=new Date(ms); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function addDays(iso,n){ const d=new Date(iso+"T00:00:00"); d.setDate(d.getDate()+n); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function dayDiff(iso){ if(!iso) return null; return Math.round((new Date(iso+"T00:00:00") - new Date(today()+"T00:00:00"))/86400000); }
 // "Stand 11/2025", wenn ein Preis nicht mehr frisch ist
@@ -786,6 +790,11 @@ function toast(msg){ S.toast=msg; render(); clearTimeout(toastTimer); toastTimer
 // sich zwei schnelle Aktionen überholen und eine davon geht verloren – deshalb
 // laufen alle Änderungen streng nacheinander durch diese Sperre.
 let opLock = Promise.resolve();
+// Merkt sich, dass dieser Haushalt verschlüsselt gespeichert hat. Anders als
+// S.vault überlebt die Marke das Wegfallen des Schlüssels und macht die
+// Klartextsperre in writeLocal unabhängig davon, in welcher Reihenfolge
+// Sperren, Zurücksetzen und ein laufender Sync sich in die Quere kommen.
+let e2eJemals = false;
 function withLock(fn){
   const run = () => fn();
   const p = opLock.then(run, run);
@@ -811,7 +820,10 @@ async function writeLocal(name, value){
   // Schlüssel mitten in einem Lauf weg – Sperren oder Zurücksetzen während eines
   // Syncs –, landeten sonst Namen und Listen unverschlüsselt im Speicher und in
   // der Datenbank, und zwar mit leerem Inhalt: doppelter Schaden.
-  if(!S.key && S.vault) return false;
+  // Die Sperre darf dabei nicht an S.vault hängen: "Alles auf diesem Handy
+  // löschen" nullt S.key UND S.vault, damit wären beide Wächter gleichzeitig
+  // blind. e2eJemals bleibt stehen, bis der Haushalt bewusst zurückgesetzt ist.
+  if(!S.key && (S.vault || e2eJemals)) return false;
   const payload = S.key ? await encJson(S.key, value) : value;
   return lsSet(LS[name], payload);
 }
@@ -844,8 +856,14 @@ function mergePriceEntry(a, b){
   }
   // vergessenAt schneidet Käufe ab, die jemand bewusst gelöscht hat. Ohne das
   // holt eine Vereinigung sie beim nächsten Sync vom anderen Handy zurück.
+  // Das Zurücknehmen braucht einen eigenen Zeitstempel: noteBought löschte die
+  // Marke nur auf diesem Handy, die Vereinigung holte sie per Math.max vom
+  // anderen zurück – und schnitt damit genau den Kauf weg, der sie aufgehoben
+  // hatte. Wer zuletzt gehandelt hat, gewinnt: gekauft schlägt vergessen.
   const vergessen = Math.max(a.vergessenAt||0, b.vergessenAt||0);
-  const grenze = vergessen ? new Date(vergessen).toISOString().slice(0,10) : null;
+  const wieder = Math.max(a.wiederAt||0, b.wiederAt||0);
+  const gilt = vergessen > wieder ? vergessen : 0;
+  const grenze = gilt ? tagVon(gilt) : null;
   const buys = [...new Set([].concat(a.buys||[], b.buys||[]))]
     .filter(d => typeof d === "string" && d && (!grenze || d > grenze))
     .sort().slice(-12);
@@ -853,6 +871,7 @@ function mergePriceEntry(a, b){
     lastName: neuer.lastName || alt.lastName, buys,
     updatedAt: Math.max(a.updatedAt||0, b.updatedAt||0) };
   if(vergessen) out.vergessenAt = vergessen;
+  if(wieder) out.wiederAt = wieder;
   return out;
 }
 function mergePrices(a, b){
@@ -919,6 +938,13 @@ async function remotePut(name, data){
 let syncLaeuft = false, syncNochmal = false;
 async function syncNow(silent){
   if(!syncOn()){ S.syncState="off"; if(!silent) render(); return; }
+  // Ohne Schlüssel gibt es nichts abzugleichen: Fremdes lässt sich nicht
+  // entschlüsseln und Eigenes nicht lesen. Ein Lauf ohne Schlüssel mischte Leeres
+  // mit Leerem und schriebe das Ergebnis über den echten Stand. Genau das drohte
+  // nach "Alles auf diesem Handy löschen": dort fallen S.key und S.vault zusammen
+  // weg, und der nachgezogene Lauf unten aus dem finally fand beide Sperren blind
+  // vor – er leerte die Datenbank und meldete dabei "ok".
+  if(!S.key){ syncNochmal = false; S.syncState="off"; if(!silent) render(); return; }
   if(syncLaeuft){ syncNochmal = true; return; }
   syncLaeuft = true;
   // Der Schlüssel zum Startzeitpunkt. Sperren und Zurücksetzen setzen S.key
@@ -987,8 +1013,8 @@ async function syncNow(silent){
       });
 
       // Letzte Sicherung vor dem Netz: lieber nichts hochladen als Klartext oder Leeres
-      if(S.key !== key0) throw new Error("Abgebrochen – der Haushalt wurde zwischendurch gesperrt.");
-      await remotePut(name, S.key ? await encJson(S.key, merged) : merged);
+      if(!S.key || S.key !== key0) throw new Error("Abgebrochen – der Haushalt wurde zwischendurch gesperrt.");
+      await remotePut(name, await encJson(S.key, merged));
     }
     S.syncState="ok"; S.err=null;
   }catch(e){
@@ -1119,7 +1145,7 @@ function normPriceEntry(e){
   // noteBought baut sein e aus genau diesem Rückgabewert.
   const out = { byStore:{}, last:{price:e.price!=null?e.price:null, store:e.store||null, at:e.at||null},
     lastName: e.lastName || null, buys: Array.isArray(e.buys) ? e.buys : [],
-    vergessenAt: e.vergessenAt || 0, updatedAt: e.updatedAt||0 };
+    vergessenAt: e.vergessenAt || 0, wiederAt: e.wiederAt || 0, updatedAt: e.updatedAt||0 };
   if(e.price!=null && e.store) out.byStore[e.store] = { price:e.price, at:e.at||null };
   return out;
 }
@@ -1166,7 +1192,11 @@ async function noteBought(name){
     if(e.buys.length > 12) e.buys = e.buys.slice(-12);
     // Wer den Artikel wieder kauft, will ihn offenbar wieder im Verlauf haben.
     // Die Vergessen-Marke muss weg, sonst filtert sie den neuen Kauf gleich mit.
+    // Das Löschen allein reicht aber nicht: beim Sync holt die Vereinigung die
+    // Marke vom anderen Handy zurück. wiederAt hält dagegen und gewinnt, weil es
+    // jünger ist – siehe mergePriceEntry().
     delete e.vergessenAt;
+    e.wiederAt = now();
     e.updatedAt = now();
     cur[key] = e;
     S.prices = cur;
@@ -1636,6 +1666,14 @@ async function boot(){
   S.sortByStore = lsGet("zettl.sort", true);
   S.pref = Object.assign({ bio:false, regional:false, co2:true }, lsGet("zettl.pref", {}));
   S.zu = lsGet("zettl.zu", {});
+  // Früher stand der Raumname im Aufklapp-Schlüssel ("r:Omas Zimmer") und lag
+  // damit im Klartext im Speicher. Einmal wegräumen; der Zustand baut sich neu
+  // auf, die neuen Schlüssel heißen "rid:" beziehungsweise "rn:".
+  if(Object.keys(S.zu).some(k => k.indexOf("r:")===0)){
+    const sauber = {};
+    for(const k in S.zu) if(k.indexOf("r:")!==0) sauber[k] = S.zu[k];
+    S.zu = sauber; lsSet("zettl.zu", S.zu);
+  }
   const fromLink = applyInviteLink();
   const vault = lsGet(LS.vault, null);
   if(!vault){
@@ -1643,7 +1681,7 @@ async function boot(){
     if(syncOn()){
       try{
         const rv = await remoteGet("vault");
-        if(rv){ lsSet(LS.vault, rv); S.vault=rv; S.phase="unlock"; render(); return; }
+        if(rv){ lsSet(LS.vault, rv); S.vault=rv; e2eJemals=true; S.phase="unlock"; render(); return; }
       }catch(e){
         if(fromLink){ S.connectErr="Die Datenbank ist gerade nicht erreichbar ("+(e.message||e)+")."; S.phase="connect"; render(); return; }
       }
@@ -1651,7 +1689,7 @@ async function boot(){
     S.phase = fromLink ? "connect" : "welcome";
     render(); return;
   }
-  S.vault = vault;
+  S.vault = vault; e2eJemals = true;
   const saved = lsGet(LS.key, null);
   if(saved){
     const k = await keyIn(saved);
@@ -1733,7 +1771,7 @@ async function doSetup(a, b, swap, pw){
   const k = await deriveKey(pw, salt);
   if(!k){ S.err="Verschlüsselung nicht verfügbar – bitte die Seite über https:// öffnen."; render(); return; }
   const vault = { v:1, salt, check: await encJson(k, {ok:true}) };
-  S.key=k; S.vault=vault; lsSet(LS.vault, vault);
+  S.key=k; S.vault=vault; e2eJemals=true; lsSet(LS.vault, vault);
   const members = [
     { id:uid(), name:a.trim(), color: swap?"teal":"amber", updatedAt:now() },
     { id:uid(), name:b.trim(), color: swap?"amber":"teal", updatedAt:now() }
@@ -1753,7 +1791,7 @@ async function doUnlock(pw){
   if(!vault){ S.phase="setup"; render(); return; }
   const k = await deriveKey(pw, vault.salt);
   if(!k || !(await decJson(k, vault.check))){ S.unlockErr="Falsches Passwort."; render(); return; }
-  S.key=k; S.vault=vault;
+  S.key=k; S.vault=vault; e2eJemals=true;
   const ex = await keyOut(k); if(ex) lsSet(LS.key, ex);
   // Erst holen, dann entscheiden: sonst sieht ein frisches Handy leere Listen
   // und würde fälschlich den Einrichtungs-Bildschirm zeigen.
@@ -2136,7 +2174,7 @@ async function doConnect(url, key){
     const rv = await remoteGet("vault");
     S.connectBusy=false;
     if(!rv){ S.connectErr="Verbunden, aber dort liegt noch kein Haushalt. Leg ihn zuerst am anderen Handy an."; render(); return; }
-    lsSet(LS.vault, rv); S.vault=rv;
+    lsSet(LS.vault, rv); S.vault=rv; e2eJemals=true;
     S.phase="unlock"; render();
   }catch(e){
     S.connectBusy=false;
@@ -2150,9 +2188,21 @@ async function doConnect(url, key){
 
 function pickMe(id){ S.meId=id; lsSet(LS.me, id); S.phase="main"; render(); }
 function lockApp(){ S.key=null; lsDel(LS.key); S.modal=null; S.phase="unlock"; render(); }
-function resetAll(){
-  Object.values(LS).forEach(k => { if(k!==LS.sync) lsDel(k); });
-  S.key=null; S.vault=null; S.members=[]; S.shopping=[]; S.tasks=[]; S.prices={}; S.meId=null;
+async function resetAll(){
+  // Unter der Sperre: stünde ein Sync gerade zwischen readLocal und writeLocal,
+  // schriebe er die eben entschlüsselten Listen hinterher wieder hinaus – mit
+  // einem Schlüssel, den es dann nicht mehr gibt, also im Klartext.
+  await withLock(async () => {
+    Object.values(LS).forEach(k => { if(k!==LS.sync) lsDel(k); });
+    // Diese drei stehen nicht in LS und blieben deshalb bisher liegen, obwohl der
+    // Dialog "alle Listen und das Passwort auf diesem Handy" verspricht. In
+    // zettl.zu stehen zudem Raumnamen – siehe foldKey().
+    lsDel("zettl.zu"); lsDel("zettl.pref"); lsDel("zettl.sort");
+    syncNochmal = false;               // keinen nachgezogenen Lauf mehr starten
+    e2eJemals = false;
+    S.key=null; S.vault=null; S.members=[]; S.shopping=[]; S.tasks=[]; S.prices={}; S.meId=null;
+    S.zu={}; S.pref={ bio:false, regional:false, co2:true }; S.sortByStore=true;
+  });
   S.modal=null; S.phase="setup"; render();
 }
 // Rät den Raumtyp aus dem Namen, damit die Vorschläge sofort passen
@@ -2222,7 +2272,11 @@ function viewSig(){
   // sonst keinen Ausweis und zeichnet nicht neu. Und today(), weil die Fälligkeit
   // am Datum hängt – sonst steht bei über Mitternacht offener App der Stand von gestern.
   const preise = (p) => { let n=0, u=0; for(const k in (p||{})){ n++; u += (p[k] && p[k].updatedAt) || 0; } return n+":"+u; };
-  return [S.phase, S.tab, S.modal, S.modalBack, S.floor, S.syncState, S.err, S.toast, S.sortByStore, S.draft.cat,
+  // S.syncMsg gehört dazu: bleibt der Zustand "error" und ändert sich nur der
+  // Grund – erst "Failed to fetch" im Funkloch, später "HTTP 401" nach einem
+  // Schlüsselwechsel –, zeichnete die stille Runde sonst nie neu und im Banner
+  // stand weiter der alte, falsche Grund.
+  return [S.phase, S.tab, S.modal, S.modalBack, S.floor, S.syncState, S.syncMsg, S.err, S.toast, S.sortByStore, S.draft.cat,
     preise(S.prices), today(),
     Object.keys(S.zu).filter(k=>S.zu[k]).join(","),
     S.taskId, Object.keys(S.prodSel).filter(k=>S.prodSel[k]).join(","),
@@ -2606,6 +2660,21 @@ function secHead(o){
 }
 const istZu = (key) => !!(S.zu && S.zu[key]);
 
+// Der Aufklappzustand liegt unverschlüsselt in localStorage – er wird schon
+// gebraucht, bevor der Haushalt entsperrt ist. Deshalb darf im Schlüssel kein
+// Raumname stehen: "r:Omas Zimmer" verriet die ganze Raumaufteilung an jeden,
+// der das gesperrte Handy in die Hand bekommt, während dieselben Namen im
+// Datensatz "rooms" aufwändig verschlüsselt werden. Die Raum-ID ist ein uid()
+// und sagt nichts; für Aufgaben, deren Raum es nicht mehr gibt, bleibt eine
+// Zahl. Die alten "r:"-Schlüssel räumt boot() einmalig weg.
+function kurzHash(s){
+  let h = 2166136261;
+  const t = String(s||"");
+  for(let i=0;i<t.length;i++){ h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(36);
+}
+const foldKey = (room, rObj) => (rObj && rObj.id) ? "rid:"+rObj.id : "rn:"+kurzHash(room);
+
 function badge(due){
   const d = dayDiff(due); if(d==null) return "";
   if(d<0)  return '<span class="badge over">'+(-d)+' T. drüber</span>';
@@ -2662,10 +2731,10 @@ function listTasks(){
   general.forEach(room => {
     byRoom[room].sort((a,b)=>String(a.due||"9999").localeCompare(String(b.due||"9999")));
     const rObj = roomByName(room);
-    h += secHead({ key:"r:"+room, icon:roomIcon(rObj?rObj.type:"allgemein",16), name:room,
+    h += secHead({ key:foldKey(room, rObj), icon:roomIcon(rObj?rObj.type:"allgemein",16), name:room,
                    zusatz:'· ohne Raum', anzahl:byRoom[room].length,
                    extra:(rObj ? '<button class="link" data-tips="'+rObj.id+'">Vorschläge</button>' : '') });
-    if(!istZu("r:"+room)) h += byRoom[room].map(taskRow).join("");
+    if(!istZu(foldKey(room, rObj))) h += byRoom[room].map(taskRow).join("");
   });
 
   if(!order.length && !general.length) h += '<div class="empty"><b>Hier ist nichts offen.</b><span>In diesem Geschoss gibt es gerade keine Aufgaben.</span></div>';
@@ -2673,11 +2742,11 @@ function listTasks(){
     byRoom[room].sort((a,b)=>String(a.due||"9999").localeCompare(String(b.due||"9999")));
     const rObj = roomByName(room);
     const faellig = byRoom[room].filter(t => t.due && dayDiff(t.due) <= 0).length;
-    h += secHead({ key:"r:"+room, icon:roomIcon(rObj?rObj.type:"allgemein",16), name:room,
+    h += secHead({ key:foldKey(room, rObj), icon:roomIcon(rObj?rObj.type:"allgemein",16), name:room,
                    zusatz:(rObj && !S.floor && floors.length>1 ? '· '+esc(roomFloor(rObj)) : ''),
                    anzahl:byRoom[room].length + (faellig ? " · "+faellig+" fällig" : ""),
                    extra:(rObj ? '<button class="link" data-tips="'+rObj.id+'">Vorschläge</button>' : '') });
-    if(!istZu("r:"+room)) h += byRoom[room].map(taskRow).join("");
+    if(!istZu(foldKey(room, rObj))) h += byRoom[room].map(taskRow).join("");
   });
   if(done.length){
     h += secHead({ key:"r:erledigt", name:"Erledigt", anzahl:done.length });

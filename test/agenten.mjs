@@ -28,6 +28,11 @@ function dbFor(u){ const h=String(u).replace(/^https?:\/\//,"").split("/")[0];
   if(!DBS.has(h)) DBS.set(h,new Map()); return DBS.get(h); }
 const REMOTE = { clear(){ DBS.clear(); }, has(k){ for(const d of DBS.values()) if(d.has(k)) return true; return false; },
   get(k){ for(const d of DBS.values()) if(d.has(k)) return d.get(k); return undefined; },
+  // Schreibweg in die Fake-Datenbank. Ohne ihn liess sich ein FREMDER Stand gar
+  // nicht herstellen – die App schreibt immer nur ihren eigenen –, und damit war
+  // alles untestbar, was auf Fremdes reagiert: der Tresor-Schutz und die
+  // Vereinigung mit einem Stand, den dieses Handy nie geschrieben hat.
+  put(host, id, data){ dbFor(host).set(id, data); },
   keys(){ const s=new Set(); for(const d of DBS.values()) for(const k of d.keys()) s.add(k); return s; } };
 let PREISDATEI = { fail: false, inhalt: { stand: "2026-07-29", artikel: [
   ["S-BUDGET Butter", 1.51, "Spar", "250 g", 1, 0, 0, "kuehl"],
@@ -3814,6 +3819,89 @@ try {
   if (!items.some(i => i.name === "Milch")) throw new Error("Artikel nach den Syncs verschwunden");
   ok("Agent 168 – Gleichzeitige Syncs laufen nacheinander: nie mehr als eine Anfrage offen (" + anfragen + " gesamt)");
 } catch (e) { bad("Agent 168", e); }
+
+// ---------------- Agent 169: "Alles löschen" schreibt nichts Nacktes in die Datenbank
+// Der Reset nullt S.key UND S.vault. Damit waren früher beide Wächter gleichzeitig
+// blind – der nachgezogene Sync aus dem finally mischte Leeres mit Leerem und
+// überschrieb die verschlüsselten Zeilen mit nackten [], bei Meldung "ok".
+try {
+  REMOTE.clear();
+  const cfg = JSON.stringify({ url: "https://reset.supabase.co", key: "k" });
+  const { w } = makePhone({ "zettl.sync": cfg }); await setup(w);
+  await addItem(w, "Ibuprofen"); await sleep(700);
+  const vorher = REMOTE.get("shopping");
+  if (!vorher || !vorher.__enc) throw new Error("Vor dem Reset lag nichts Verschlüsseltes in der Datenbank");
+  click(w, "#settings"); await sleep(150);
+  click(w, "#reset"); await sleep(150);
+  click(w, "#yes");
+  await sleep(1500);                    // der nachgezogene Lauf kommt über setTimeout
+  const nachher = REMOTE.get("shopping");
+  if (nachher && !nachher.__enc)
+    throw new Error("Nach dem Reset steht Unverschlüsseltes in der Datenbank: " + JSON.stringify(nachher).slice(0, 90));
+  ok("Agent 169 – 'Alles löschen' schreibt weder Klartext noch Leeres in die Datenbank");
+} catch (e) { bad("Agent 169", e); }
+
+// ---------------- Agent 170: Ein fremder Tresor hält den Sync an
+// Nach "Alles löschen" und Neuanlage bleibt der alte Tresor in der Datenbank
+// liegen. Würde weitergeschrieben, könnte hinterher kein Handy mehr entschlüsseln.
+try {
+  REMOTE.clear();
+  const host = "https://fremd.supabase.co";
+  const { w } = makePhone({ "zettl.sync": JSON.stringify({ url: host, key: "k" }) });
+  await setup(w);
+  await addItem(w, "Mehl"); await sleep(700);
+  const meins = (await w.__zettl.readLocal("shopping", [])).filter(i => !i.deleted).length;
+  if (!meins) throw new Error("Vorbedingung: nichts lokal angelegt");
+  REMOTE.put(host, "vault", { salt: "ein-ganz-anderes-salt", check: { __enc: 1, iv: "x", ct: "y" } });
+  await w.__zettl.syncNow(true); await sleep(400);
+  if (w.__zettl.S.syncState !== "error")
+    throw new Error("Fremder Tresor wurde nicht bemerkt, Zustand: " + w.__zettl.S.syncState);
+  if (!String(w.__zettl.S.syncMsg || "").includes("anderer Haushalt"))
+    throw new Error("Meldung erklärt es nicht: " + w.__zettl.S.syncMsg);
+  const nach = (await w.__zettl.readLocal("shopping", [])).filter(i => !i.deleted).length;
+  if (nach !== meins) throw new Error("Der angehaltene Sync hat lokal etwas verändert");
+  ok("Agent 170 – Fremder Tresor hält den Sync an, ohne lokal etwas anzurühren");
+} catch (e) { bad("Agent 170", e); }
+
+// ---------------- Agent 171: Vergessen und am selben Tag wieder gekauft
+// Das Zurücknehmen löschte die Marke nur lokal; die Vereinigung holte sie vom
+// anderen Handy zurück und schnitt genau den Kauf weg, der sie aufgehoben hatte.
+try {
+  REMOTE.clear();
+  const host = "https://vergessen.supabase.co";
+  const { w } = makePhone({ "zettl.sync": JSON.stringify({ url: host, key: "k" }) });
+  await setup(w);
+  await addItem(w, "Ibuprofen");
+  [...w.document.querySelectorAll("[data-toggle]")].find(b => b.closest(".item").textContent.includes("Ibuprofen"))
+    .dispatchEvent(new w.Event("click", { bubbles: true }));
+  await sleep(800);
+  const lokal = await w.__zettl.readLocal("prices", {});
+  const key = Object.keys(lokal)[0];
+  if (!key) throw new Error("Vorbedingung: kein Kaufgedächtnis angelegt");
+  const heute = Object.keys(lokal).length && (lokal[key].buys || [])[0];
+  if (!heute) throw new Error("Vorbedingung: kein Kaufdatum eingetragen");
+  // Der Stand des anderen Handys: dort wurde der Artikel vorhin vergessen.
+  // Unverschlüsselt, weil die App ältere Klartextstände ausdrücklich mitliest.
+  REMOTE.put(host, "prices", { [key]: { byStore: {}, last: null, buys: [],
+    vergessenAt: Date.now() - 60000, updatedAt: Date.now() - 60000 } });
+  await w.__zettl.syncNow(true); await sleep(500);
+  const nach = await w.__zettl.readLocal("prices", {});
+  if (!((nach[key] || {}).buys || []).includes(heute))
+    throw new Error("Der Kauf wurde beim Abgleich von der Vergessen-Marke weggeschnitten");
+  ok("Agent 171 – Am selben Tag wieder gekauft: der Kauf überlebt den Abgleich");
+} catch (e) { bad("Agent 171", e); }
+
+// ---------------- Agent 172: Keine Raumnamen im Klartext im Aufklappzustand
+// zettl.zu liegt unverschlüsselt im Speicher, weil es vor dem Entsperren
+// gebraucht wird. Früher stand der Raumname im Schlüssel.
+try {
+  const { w } = makePhone({ "zettl.zu": JSON.stringify({ "r:Omas Zimmer": true, "wagerl": true }) });
+  await sleep(500);
+  const zu = w.localStorage.getItem("zettl.zu") || "";
+  if (zu.includes("Omas Zimmer")) throw new Error("Raumname bleibt im Klartext liegen: " + zu);
+  if (!zu.includes("wagerl")) throw new Error("Der übrige Aufklappzustand wurde mit weggeräumt: " + zu);
+  ok("Agent 172 – Alte Raumnamen verschwinden aus zettl.zu, der Rest bleibt stehen");
+} catch (e) { bad("Agent 172", e); }
 
 console.log("\n================ TESTLAUF ================");
 results.forEach(r => console.log((r[0] === "PASS" ? "✅" : "❌") + "  " + r[1] + (r[2] ? "\n     → " + r[2] : "")));
