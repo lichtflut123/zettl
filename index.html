@@ -1141,11 +1141,30 @@ function wagerlKandidaten(begriff){
 }
 
 // Entscheidung 7: Stückgewichte für Stückware, die je Kilo gepreist ist –
-// klein, kuratiert, und jede Annahme steht sichtbar in der Zeile. Formen
-// ausgeschrieben (Ein- und Mehrzahl), damit kein Ratespiel entsteht.
-const STK_GRAMM = { banane:120, bananen:120, apfel:180, aepfel:180, ei:60, eier:60,
-  semmel:60, semmeln:60, zitrone:100, zitronen:100, orange:180, orangen:180,
-  zwiebel:100, zwiebeln:100, erdapfel:120, erdaepfel:120, paradeiser:100, gurke:400, gurken:400 };
+// kuratierte DURCHSCHNITTE (eingespeist am 30.07.2026), und jede Annahme steht
+// sichtbar in der Zeile ("2 Stück ≈ 2 kg angenommen"). Formen ausgeschrieben
+// (Ein- und Mehrzahl, umlautgefaltet wie norm()), damit kein Ratespiel entsteht.
+// Was hier NICHT steht – Bund-Ware, Unbestimmbares –, wird ehrlich verweigert.
+const STK_GRAMM = {
+  // Obst
+  banane:120, bananen:120, apfel:180, aepfel:180, birne:180, birnen:180,
+  orange:180, orangen:180, mandarine:80, mandarinen:80, zitrone:100, zitronen:100,
+  limette:60, limetten:60, kiwi:90, kiwis:90, pfirsich:150, pfirsiche:150,
+  nektarine:140, nektarinen:140, marille:60, marillen:60, zwetschke:40, zwetschken:40,
+  melone:1000, melonen:1000, wassermelone:5000, wassermelonen:5000,
+  ananas:1500, mango:300, mangos:300, avocado:200, avocados:200,
+  granatapfel:300, granataepfel:300, grapefruit:300, grapefruits:300,
+  // Gemüse
+  gurke:400, gurken:400, paradeiser:100, tomate:100, tomaten:100,
+  paprika:200, zucchini:300, melanzani:300, aubergine:300, auberginen:300,
+  karotte:100, karotten:100, zwiebel:100, zwiebeln:100, knoblauch:50,
+  erdapfel:120, erdaepfel:120, kartoffel:120, kartoffeln:120,
+  salat:300, haeuptelsalat:300, kohlrabi:300, brokkoli:400, karfiol:800,
+  kuerbis:1500, kuerbisse:1500, lauch:250, porree:250, sellerie:700,
+  suesskartoffel:250, suesskartoffeln:250, champignon:20, champignons:20,
+  // Backwaren und Eier
+  semmel:60, semmeln:60, ei:60, eier:60
+};
 function stkGramm(begriff){
   for(const wort of norm(begriff).split(" ")) if(STK_GRAMM[wort]) return STK_GRAMM[wort];
   return null;

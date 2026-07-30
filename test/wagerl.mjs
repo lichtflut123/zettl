@@ -195,21 +195,27 @@ try {
 
 // ---------------- Wagerl 8: Annahmetabelle für Stückware (Entscheidung 7)
 // "6 Bananen" bei Kilo-Preis: sichtbare Annahme ("≈ 0,72 kg angenommen").
-// "2 Melonen" ohne Tabelleneintrag: ehrliche Verweigerung statt stiller Rechnung.
+// "2 Melonen": Durchschnitt ≈ 1 kg je Stück (eingespeist am 30.07.), also "≈ 2 kg".
+// "2 Mangold" hat keinen sinnvollen Stück-Durchschnitt (Bund-Ware) – ehrliche
+// Verweigerung statt stiller Rechnung.
 try {
   PREISDATEI.inhalt.artikel.push(["Bananen", 1.99, "Billa", "1 kg", 0, 0, 0, "obst"],
-                                 ["Melonen", 2.99, "Spar", "1 kg", 0, 0, 0, "obst"]);
+                                 ["Melonen", 2.99, "Spar", "1 kg", 0, 0, 0, "obst"],
+                                 ["Mangold", 2.49, "Spar", "1 kg", 0, 0, 0, "obst"]);
   const { w } = makePhone(); await setup(w);
   click(w, "#openWagerl"); await sleep(150);
   type(w, "#vorlageWas", "6 Bananen"); click(w, "#vorlageAdd"); await sleep(250);
   type(w, "#vorlageWas", "2 Melonen"); click(w, "#vorlageAdd"); await sleep(250);
+  type(w, "#vorlageWas", "2 Mangold"); click(w, "#vorlageAdd"); await sleep(250);
   click(w, "#wagerlRechnen");
   await until(() => $(w, '[data-wagerl="guenstig"]'), "Wagerl-Karten");
   const g = $(w, '[data-wagerl="guenstig"]').textContent;
   if (!g.includes("Bananen")) throw new Error("Bananen nicht besetzt");
-  if (!g.includes("angenommen") || !g.includes("0,72")) throw new Error("Annahme nicht offen ausgewiesen: " + g.slice(0, 200));
-  if (!g.includes("kein Stückgewicht")) throw new Error("Melonen: keine ehrliche Verweigerung");
-  ok("Wagerl 8 – Stückware: offene Annahme bei Bananen, ehrliche Verweigerung bei Melonen");
+  if (!g.includes("0,72")) throw new Error("Bananen-Annahme nicht offen ausgewiesen: " + g.slice(0, 200));
+  if (!g.includes("Melonen") || !/2 Stück ≈ 2 kg angenommen/.test(g))
+    throw new Error("Melonen-Durchschnitt (1 kg je Stück) fehlt: " + g.slice(0, 250));
+  if (!g.includes("kein Stückgewicht")) throw new Error("Mangold: keine ehrliche Verweigerung");
+  ok("Wagerl 8 – Stückware: Annahmen offen (Banane 120 g, Melone 1 kg), Verweigerung bei Bund-Ware");
 } catch (e) { bad("Wagerl 8", e); }
 
 // ---------------- Wagerl 9: Der Verlauf schlägt der Vorlage vor (Entscheidung 12)
