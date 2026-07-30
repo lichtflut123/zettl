@@ -65,7 +65,10 @@ unverändert: Nächste Woche derselbe Druck, frische Preise, angepasste Wagerl.
     - **Etappe 1 – das Gerüst:** Vorlage als mitsyncte Liste (mit Grabsteinen,
       wie alles), Mengenparser, Auflösung (Verlauf zuerst), drei Wagerl im
       Sparplan-Rahmen mit ehrlichen Lücken, Befüllen. Knappe Packungsdeckung,
-      keine Hinweise.
+      keine Hinweise. **Gebaut am 30.07.2026, Wagerl-Agenten 1–6 grün.**
+      Offen geblieben in Etappe 1: die Wegkosten-Zeile in den Karten (kommt,
+      sobald Zuhause und Läden im Spiel sind) und ein echter Test der
+      Verlauf-zuerst-Regel (siehe Vermerk in `test/wagerl.mjs`).
     - **Etappe 2 – die Feinheiten:** Überschuss-Hinweis, Annahmetabelle
       Stückware, Verlauf-schlägt-Vorlage-vor.
     - **Etappe 3 – die Haltungshinweise:** CO₂-Tauschliste.

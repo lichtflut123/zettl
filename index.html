@@ -797,6 +797,7 @@ const S = {
   pref:{ bio:false, regional:false, co2:true }, sparBusy:false, zu:{}, altBusy:false, connectErr:null, connectBusy:false, floor:null,
   key:null, vault:null,
   sync:null, syncState:"off", syncMsg:null,   // off | ok | error | busy
+  wagerl:null, wagerlBusy:false,              // Drei Wagerl: Ergebnis und Rechenzustand
   err:null, unlockErr:null, toast:null, modal:null,
   draft:{ price:"", store:null, cat:null, showPrice:false, taskOpen:false, name:"", room:null, rep:0, title:"" },
   sortByStore: true
@@ -1092,6 +1093,119 @@ async function updateRooms(fn){
   });
   if(syncOn()) syncNow(true);
 }
+// ------------------------------------------------------------ Drei Wagerl
+// Löst die Vorlage in drei Einkaufsvarianten auf (Konzept: docs/drei-wagerl.md).
+// Etappe 1: ein Produkt je Position, knappste Packungsdeckung, keine Hinweise.
+
+// Packungsgröße in eine Basiseinheit übersetzen: "250 g"→g, "1,5 l"→ml, "10 stk"→stk.
+// Ohne verwertbare Angabe null – dann kann die Deckung nicht ehrlich gerechnet werden.
+function wagerlBasis(unit){
+  const m = String(unit||"").trim().match(/^(\d+(?:[.,]\d+)?)\s*(ml|l|kg|g|stk|stück|stueck|st\.?)$/i);
+  if(!m) return null;
+  const w = parseFloat(m[1].replace(",", "."));
+  let e = m[2].toLowerCase().replace(/\.$/,"");
+  if(e==="kg") return { menge: w*1000, art: "g" };
+  if(e==="g")  return { menge: w,      art: "g" };
+  if(e==="l")  return { menge: w*1000, art: "ml" };
+  if(e==="ml") return { menge: w,      art: "ml" };
+  return { menge: w, art: "stk" };
+}
+function wagerlZiel(mg){
+  if(mg.wert==null) return null;
+  if(mg.einheit==="kg") return { menge: mg.wert*1000, art: "g" };
+  if(mg.einheit==="g")  return { menge: mg.wert,      art: "g" };
+  if(mg.einheit==="l")  return { menge: mg.wert*1000, art: "ml" };
+  if(mg.einheit==="ml") return { menge: mg.wert,      art: "ml" };
+  return { menge: mg.wert, art: "stk" };
+}
+
+// Kandidaten zu einem Oberbegriff. Euer Verlauf zuerst (Entscheidung 3): hat der
+// Haushalt unter dem Begriff schon konkret gekauft, bilden dieses Produkt und
+// seinesgleichen – gleiche Warengruppe, gleiche Einheiten-Art – den Kreis.
+// Erst ohne Verlauf gilt die nackte Relevanz-Suche.
+function wagerlKandidaten(begriff){
+  const roh = (pdIndex && pdIndex.length) ? pdSuche(nameOhneGroesse(begriff), 15) : [];
+  const treffer = roh.filter(h => h.best && h.best.price != null);
+  const e = priceInfo(begriff);
+  if(e && e.lastName){
+    const ln = norm(nameOhneGroesse(e.lastName));
+    const gekauft = treffer.find(h => norm(nameOhneGroesse(h.name)) === ln);
+    if(gekauft){
+      const art = (wagerlBasis(gekauft.unit)||{}).art || null;
+      const kreis = treffer.filter(h => h.cat === gekauft.cat
+        && (!art || (wagerlBasis(h.unit)||{}).art === art));
+      if(kreis.length) return kreis;
+    }
+  }
+  return treffer;
+}
+
+// Knappste Deckung: kleinste Gesamtmenge >= Ziel, bei Gleichstand die billigste.
+// Ein Produkt je Position, n-mal dieselbe Packung – Mischungen sind Etappe 2.
+// Ohne Ziel (Position ohne Menge): 1 Packung, offen ausgewiesen.
+function wagerlDeckung(kandidaten, ziel){
+  let best = null;
+  for(const h of kandidaten){
+    const b = wagerlBasis(h.unit);
+    let n = 1, gesamt = null;
+    if(ziel){
+      if(!b || b.art !== ziel.art) continue;      // nie €/kg gegen €/l oder Stück
+      n = Math.max(1, Math.ceil(ziel.menge / b.menge));
+      gesamt = n * b.menge;
+    }
+    const kosten = n * h.best.price;
+    const kand = { h, n, gesamt, kosten };
+    if(!best
+       || (ziel && (gesamt < best.gesamt || (gesamt === best.gesamt && kosten < best.kosten)))
+       || (!ziel && kosten < best.kosten)) best = kand;
+  }
+  return best;
+}
+
+// Eine Position nach der Regel einer Variante besetzen. flag: "bio"|"regional"|null.
+// Fehlt die Kennzeichnung im ganzen Kreis, wird ehrlich der günstigste genommen
+// und die Lücke gezählt (Entscheidung 8) statt still das Nächstbeste zu behaupten.
+function wagerlPosten(v, flag){
+  const mg = vorlageMenge(v.name);
+  const ziel = wagerlZiel(mg);
+  const alle = wagerlKandidaten(mg.rest);
+  const posten = { id: v.id, begriff: mg.rest, menge: mg, produkt: null, luecke: null };
+  if(!alle.length){ posten.luecke = "fehlt"; return posten; }
+  let kreis = alle, markiert = true;
+  if(flag){
+    kreis = alle.filter(h => h[flag]);
+    if(!kreis.length){ kreis = alle; markiert = false; }
+  }
+  const wahl = wagerlDeckung(kreis, ziel) || wagerlDeckung(alle, ziel);
+  if(!wahl){ posten.luecke = "einheit"; return posten; }   // Menge passt zu keiner Packung
+  posten.produkt = { name: wahl.h.name, unit: wahl.h.unit, n: wahl.n,
+    preis: wahl.h.best.price, laden: wahl.h.best.store, kosten: wahl.kosten,
+    cat: wahl.h.cat || null, ohneMenge: !ziel };
+  if(flag && !markiert) posten.luecke = flag;
+  return posten;
+}
+
+// Alle drei Wagerl auf einmal. Rechnet über die Läden des Datensatzes und weist
+// die Aufteilung aus (Entscheidung 9); Wegkosten kommen aus dem Sparplan-Rahmen,
+// sobald Zuhause und Läden gesetzt sind – hier zählt erst die ehrliche Grundlage.
+function dreiWagerl(){
+  const vorlage = visible(S.vorlage);
+  const mach = (flag) => {
+    const posten = vorlage.map(v => wagerlPosten(v, flag));
+    let summe = 0, offen = 0, luecken = 0;
+    const laeden = {};
+    for(const p of posten){
+      if(p.produkt){
+        summe += p.produkt.kosten;
+        laeden[p.produkt.laden] = (laeden[p.produkt.laden]||0) + 1;
+        if(p.luecke) luecken++;
+      } else offen++;
+    }
+    return { posten, summe, offen, luecken, laeden };
+  };
+  return { guenstig: mach(null), regional: mach("regional"), bio: mach("bio") };
+}
+
 // Die Vorlage: Oberbegriffe mit Menge ("3 l Milch"), aus denen Drei Wagerl die
 // Einkaufsvarianten rechnet. Eine ganz normale mitsyncte Liste mit Grabsteinen.
 async function updateVorlage(fn){
@@ -1665,11 +1779,12 @@ function basketAnalysis(){
   const cheapest = {};   // Laden -> Summe, wenn man jeden Artikel dort kauft, wo er am billigsten ist
   open.forEach(i => {
     const b = (i.price!=null) ? {store:i.store||null, price:i.price} : bestPrice(i.name);
+    const mal = i.anzahl || 1;              // Drei Wagerl: n Packungen derselben Ware
     if(b && b.price!=null){
-      known++; sum += b.price;
+      known++; sum += b.price*mal;
       const st = b.store || "ohne Laden";
-      perStore[st] = (perStore[st]||0) + b.price;
-      cheapest[st] = (cheapest[st]||0) + b.price;
+      perStore[st] = (perStore[st]||0) + b.price*mal;
+      cheapest[st] = (cheapest[st]||0) + b.price*mal;
     } else unknown++;
   });
   const stores = Object.keys(perStore).sort((a,b)=>perStore[b]-perStore[a]);
@@ -2538,7 +2653,10 @@ function rowItem(i){
   const best = bestPrice(i.name);
   let meta = "";
   if(i.price!=null || i.store){
-    meta = esc(euro(i.price)) + ((i.price!=null&&i.store)?" · ":"") + esc(i.store||"");
+    // Drei Wagerl legt n Packungen als EINEN Eintrag an – der Preis in der Zeile
+    // muss dann ehrlich "3 × 1,32 €" heißen, nicht nach einer Packung aussehen.
+    const malText = (i.anzahl>1 && i.price!=null) ? i.anzahl+" × " : "";
+    meta = malText + esc(euro(i.price)) + ((i.price!=null&&i.store)?" · ":"") + esc(i.store||"");
     const gp = grundpreisText(i.price, i.size || itemMenge(i));
     if(gp) meta += ' <span style="color:var(--teal)">'+esc(gp)+'</span>';
     // Hinweis, wenn es woanders günstiger bekannt ist
@@ -3336,7 +3454,46 @@ function modalWagerl(){
    + '<div class="row"><div class="field grow"><input id="vorlageWas" placeholder="z. B. 3 l Milch" autocapitalize="off" autocorrect="off" spellcheck="false"></div>'
    + '<button class="btn" id="vorlageAdd" style="height:44px;width:auto;padding:0 16px;flex:0 0 auto">Dazu</button></div></div>'
    + '<div style="margin-top:12px">'+(rows || '<div class="muted">Noch leer. Trag ein, was ihr regelmäßig kauft.</div>')+'</div>'
+   + (list.length ? '<button class="btn'+(S.wagerlBusy?" off":"")+'" id="wagerlRechnen" style="margin-top:14px"'+(S.wagerlBusy?" disabled":"")+'>'
+       + (S.wagerlBusy ? "Rechne …" : "Drei Wagerl rechnen") + '</button>' : '')
+   + (S.wagerl ? wagerlKarten() : '')
    + '</div></div>';
+}
+// Die drei Karten unter dem Rechnen-Knopf: je Variante Posten, Summe,
+// Ladenaufteilung und die ehrlichen Lücken (Entscheidung 8).
+function wagerlKarten(){
+  const namen = { guenstig:"Die günstigste", regional:"Die regionale", bio:"Die Bio-Variante" };
+  const flagText = { regional:"nichts Regionales bekannt", bio:"nichts in Bio bekannt" };
+  let h = "";
+  for(const k of ["guenstig","regional","bio"]){
+    const wv = S.wagerl[k]; if(!wv) continue;
+    const zeilen = wv.posten.map(p => {
+      if(!p.produkt)
+        return '<div class="muted" style="margin-top:4px">'+esc(p.begriff)+' – nichts im Datensatz gefunden, bleibt wie getippt</div>';
+      const pr = p.produkt;
+      return '<div style="margin-top:4px;display:flex;justify-content:space-between;gap:8px">'
+        + '<span>'+(pr.n>1 ? pr.n+' × ' : '')+esc(pr.name)+(pr.unit ? ' <span style="opacity:.6">('+esc(pr.unit)+')</span>' : '')
+        + (pr.ohneMenge ? ' <span style="opacity:.6">· Menge offen, 1 Packung angenommen</span>' : '')
+        + (p.luecke && flagText[p.luecke] ? ' <span style="opacity:.6">· '+flagText[p.luecke]+'</span>' : '')
+        + '</span><span style="flex:0 0 auto">'+esc(pr.laden)+' · '+esc(euro(pr.kosten))+'</span></div>';
+    }).join("");
+    const laeden = Object.keys(wv.laeden).sort((a,b)=>wv.laeden[b]-wv.laeden[a])
+      .map(l => wv.laeden[l]+" bei "+esc(l)).join(", ");
+    h += '<div class="note" data-wagerl="'+k+'" style="margin-top:12px">'
+      + '<div style="display:flex;justify-content:space-between;gap:8px"><b>'+namen[k]+'</b>'
+      + '<b>'+esc(euro(wv.summe))+(wv.offen ? ' <span style="opacity:.6;font-weight:400">· '+wv.offen+' Position'+(wv.offen>1?'en':'')+' offen</span>' : '')+'</b></div>'
+      + (laeden ? '<div class="muted" style="margin-top:2px">'+laeden+'</div>' : '')
+      + (wv.luecken ? '<div class="muted" style="margin-top:2px">Lücke: für '+wv.luecken+' von '+wv.posten.length+' Positionen ist '
+          + (k==="bio" ? 'nichts in Bio' : 'nichts Regionales')+' bekannt.</div>' : '')
+      // Entscheidung 9: Hofer steht nur mit einem Bruchteil des Sortiments im
+      // Datensatz. Kauft die Karte dort, gehört die Einschränkung dazu – sonst
+      // klingt "die günstigste" vollständiger, als der Datensatz es hergibt.
+      + (wv.laeden["Hofer"] ? '<div class="muted" style="margin-top:2px">Hofer ist im Datensatz nur teilweise erfasst – dort kann es mehr geben.</div>' : '')
+      + zeilen
+      + '<button class="btn ghost" data-wagerl-nehmen="'+k+'" style="margin-top:10px">Dieses Wagerl nehmen</button>'
+      + '</div>';
+  }
+  return h;
 }
 function modalShops(){
   // Ein Grabstein ({deleted:true}) ist kein Standort
@@ -3474,7 +3631,7 @@ function wireMain(){
     toast("Erledigte entfernt");
   };
 
-  const ow=$("#openWagerl"); if(ow) ow.onclick = () => { S.modal="wagerl"; render(); };
+  const ow=$("#openWagerl"); if(ow) ow.onclick = () => { S.wagerl=null; S.modal="wagerl"; render(); };
 
   document.querySelectorAll(".mini [data-rid]").forEach(el => el.onclick = () => {
     S.planRoom = el.getAttribute("data-rid"); S.modal="roomtasks"; render(); });
@@ -3774,13 +3931,39 @@ function wireModal(){
     // meinen dieselbe Position. Menge ändern heißt: löschen und neu eintragen.
     const neu = norm(vorlageMenge(n).rest);
     if((S.vorlage||[]).some(v => !v.deleted && norm(vorlageMenge(v.name).rest)===neu)){ el.value=""; return; }
+    S.wagerl = null;                       // gerechnete Karten passen nicht mehr
     await updateVorlage(list => list.concat([{ id:uid(), name:n, updatedAt:now() }]));
     const el2=$("#vorlageWas"); if(el2) el2.focus();
   };
   const vw=$("#vorlageWas"); if(vw) vw.onkeydown = e => { if(e.key==="Enter"){ const b=$("#vorlageAdd"); if(b) b.click(); } };
   document.querySelectorAll("[data-vorlage-del]").forEach(b => b.onclick = () => {
     const id=b.getAttribute("data-vorlage-del");
+    S.wagerl = null;
     updateVorlage(list => list.map(v => v.id===id ? Object.assign({}, v, {deleted:true, updatedAt:now()}) : v));
+  });
+  const wr=$("#wagerlRechnen"); if(wr) wr.onclick = async () => {
+    S.wagerlBusy = true; render();
+    try{ await ladePreisdatei(); }catch(e){}   // ohne Datei rechnen die Karten mit leeren Treffern – ehrliche Lücken
+    S.wagerl = dreiWagerl();
+    S.wagerlBusy = false; render();
+  };
+  document.querySelectorAll("[data-wagerl-nehmen]").forEach(b => b.onclick = async () => {
+    const k = b.getAttribute("data-wagerl-nehmen");
+    const wv = S.wagerl && S.wagerl[k]; if(!wv) return;
+    // Ergänzen, nie ersetzen (Entscheidung 11, probeweise): Bestehendes bleibt,
+    // Lücken-Positionen landen wie handgetippt, der Ursprung bleibt vermerkt.
+    const neu = wv.posten.map(p => {
+      if(!p.produkt) return { id:uid(), name:p.begriff, ursprung:p.begriff, updatedAt:now() };
+      const it = { id:uid(), name:p.produkt.name, price:p.produkt.preis, store:p.produkt.laden,
+                   ursprung:p.begriff, updatedAt:now() };
+      if(p.produkt.cat) it.cat = p.produkt.cat;
+      if(p.produkt.unit) it.size = p.produkt.unit;
+      if(p.produkt.n > 1) it.anzahl = p.produkt.n;
+      return it;
+    });
+    S.wagerl = null; S.modal = null;
+    await updateItems("shopping", list => list.concat(neu));
+    toast("Wagerl übernommen – "+neu.length+" Artikel auf dem Zettel");
   });
 
   // --- Räume verwalten ---
