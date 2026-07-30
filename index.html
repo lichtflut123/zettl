@@ -980,18 +980,34 @@ async function syncNow(silent){
       const mine = await readLocal(name,
         name==="prices" ? {} : name==="plan" ? {bg:{}} : name==="shops" ? {home:null,list:[]} : []);
       if(name==="plan"){
-        // Grundriss-Hintergründe: neuere Skizze gewinnt je Geschoss
+        // Grundriss-Hintergründe: je Geschoss gewinnt der jüngere Stempel – auch
+        // wenn dahinter keine Skizze steht, denn das IST die Löschung (savePlanBg
+        // lässt den Stempel als Grabstein stehen). Die alte Fassung nahm Fremdes
+        // schon dann, wenn es hier fehlte – so kam Gelöschtes zurück. Und sie
+        // verglich Stempel nur, wenn BEIDE Seiten welche hatten – eine Seite ohne
+        // bgAt (alter Stand) konnte nie verlieren.
         const a = mine||{bg:{}}, b = theirs||{bg:{}};
-        const bg = Object.assign({}, a.bg||{});
-        for(const f in (b.bg||{})) if(!bg[f] || (b.bgAt&&a.bgAt && b.bgAt[f]>a.bgAt[f]) ) bg[f]=b.bg[f];
-        merged = { bg, bgAt: Object.assign({}, (b.bgAt||{}), (a.bgAt||{})) };
+        const at = (x,f) => (x.bgAt && x.bgAt[f]) || 0;
+        const bg = {}, bgAt = {};
+        const alle = new Set([].concat(Object.keys(a.bg||{}), Object.keys(b.bg||{}),
+                                       Object.keys(a.bgAt||{}), Object.keys(b.bgAt||{})));
+        for(const f of alle){
+          // Gleichstand geht an das eigene Handy – bei zwei Ständen ohne Stempel
+          // bleibt so die eigene Skizze stehen statt einer fremden.
+          const sieger = at(b,f) > at(a,f) ? b : a;
+          if(sieger.bg && sieger.bg[f] != null) bg[f] = sieger.bg[f];
+          const t = Math.max(at(a,f), at(b,f));
+          if(t) bgAt[f] = t;
+        }
+        merged = { bg, bgAt };
       }
       else if(name==="shops"){
         const a = mine||{home:null,list:[]}, b = theirs||{home:null,list:[]};
         const neuer = (x, y) => (!x ? y : !y ? x : ((x.at||0) >= (y.at||0) ? x : y));
-        merged = { home: neuer(a.home, b.home),
+        merged = { home: neuer(a.home, b.home),   // gelöscht ist {deleted:true,at} – ein Wert, kein Fehlen
                    car: neuer(a.car, b.car),
                    srv: neuer(a.srv, b.srv),     // auch das Entfernen muss ankommen
+                   file: neuer(a.file, b.file),  // die eigene Preisdatei-Adresse; fehlte hier und wurde von jedem Sync gelöscht
                    list: mergeItems(a.list||[], b.list||[]) };
       }
       else if(name==="prices") merged = mergePrices(mine, theirs||{});
@@ -1842,7 +1858,10 @@ async function savePlanBg(floor, dataUrl){
   const plan = await readLocal("plan", {bg:{}}) || {bg:{}};
   plan.bg = plan.bg || {}; plan.bgAt = plan.bgAt || {};
   if(dataUrl){ plan.bg[floor] = dataUrl; plan.bgAt[floor] = now(); }
-  else { delete plan.bg[floor]; delete plan.bgAt[floor]; }
+  // Beim Löschen bleibt der Stempel als Grabstein stehen. Ohne ihn ist "gelöscht"
+  // von "nie gehabt" nicht zu unterscheiden, und der nächste Sync holt die Skizze
+  // vom anderen Handy zurück.
+  else { delete plan.bg[floor]; plan.bgAt[floor] = now(); }
   S.plan = plan;
   await writeLocal("plan", plan);
   render();
@@ -3258,7 +3277,8 @@ function modalServer(){
    + '</div></div>';
 }
 function modalShops(){
-  const home = S.shops.home;
+  // Ein Grabstein ({deleted:true}) ist kein Standort
+  const home = (S.shops.home && !S.shops.home.deleted && S.shops.home.lat!=null) ? S.shops.home : null;
   const list = (S.shops.list||[]).filter(s => !s.deleted);
   const chosen = list.filter(s => s.chosen);
   const rows = list.map(s =>
@@ -3687,7 +3707,9 @@ function wireModal(){
   const csrv=$("#closeSrv"); if(csrv) csrv.onclick=()=>{ S.modal="settings"; S.srvNote=null; render(); };
   const pdt=$("#pdTest"); if(pdt) pdt.onclick = async () => {
     const eigene = ($("#pdUrl").value||"").trim();
-    await saveShops(Object.assign({}, S.shops, { file: eigene ? { url:eigene, at:now() } : null }));
+    // Auch das Entfernen ist ein Wert mit Stempel (url:null), wie beim Server –
+    // ein nacktes null verlöre gegen den alten Stand des anderen Handys.
+    await saveShops(Object.assign({}, S.shops, { file: { url: eigene || null, at:now() } }));
     pdIndex=null; pdStand=null; pdFehler=null;
     S.srvNote={cls:"note", html:'<span style="color:var(--mut)">Lade Preisdatei …</span>'}; render();
     await ladePreisdatei();
@@ -3741,7 +3763,9 @@ function wireModal(){
       render();
     }
   };
-  const ch=$("#clearHome"); if(ch) ch.onclick=()=>saveShops(Object.assign({}, S.shops, { home:null }));
+  // Grabstein statt null: "nicht vorhanden" ist von "gelöscht" sonst nicht zu
+  // unterscheiden, und der nächste Sync holt das Zuhause vom anderen Handy zurück.
+  const ch=$("#clearHome"); if(ch) ch.onclick=()=>saveShops(Object.assign({}, S.shops, { home:{ deleted:true, at:now() } }));
 
   // Ort statt Standort
   const pg=$("#placeGo"); if(pg) pg.onclick = async () => {
@@ -3781,8 +3805,9 @@ function wireModal(){
   });
   document.querySelectorAll("[data-shop]").forEach(b => b.onclick = () => {
     const id=b.getAttribute("data-shop");
-    saveShops({ home:S.shops.home, list:(S.shops.list||[]).map(s => s.id===id
-      ? Object.assign({}, s, {chosen:!s.chosen, updatedAt:now()}) : s) });
+    // Object.assign statt Neuaufbau: {home, list} allein warf car, srv und file weg
+    saveShops(Object.assign({}, S.shops, { list:(S.shops.list||[]).map(s => s.id===id
+      ? Object.assign({}, s, {chosen:!s.chosen, updatedAt:now()}) : s) }));
   });
   const sc=$("#saveCar"); if(sc) sc.onclick = async () => {
     const v = parseEuro($("#carUse").value), p = parseEuro($("#carPrice").value);
@@ -3792,7 +3817,7 @@ function wireModal(){
   const as=$("#addShop"); if(as) as.onclick = () => {
     const el=$("#shopName"), n=(el.value||"").trim(); if(!n) return;
     if((S.shops.list||[]).some(s=>!s.deleted && norm(s.name)===norm(n))){ el.value=""; return; }
-    saveShops({ home:S.shops.home, list:(S.shops.list||[]).concat([{id:uid(), name:n, dist:null, chosen:true, updatedAt:now()}]) });
+    saveShops(Object.assign({}, S.shops, { list:(S.shops.list||[]).concat([{id:uid(), name:n, dist:null, chosen:true, updatedAt:now()}]) }));
   };
   const sn=$("#shopName"); if(sn) sn.onkeydown = e => { if(e.key==="Enter") $("#addShop").click(); };
 
@@ -4086,7 +4111,7 @@ setInterval(() => { if(document.visibilityState==="visible" && S.phase==="main" 
   if(s){ s.addEventListener("click", weg); setTimeout(weg, 2300); }
 })();
 
-if(typeof window!=="undefined") window.__zettl = { S, boot, doSetup, doUnlock, syncNow, updateItems, readLocal, writeLocal, setRoomRect, findShops, saveShops, LS };
+if(typeof window!=="undefined") window.__zettl = { S, boot, doSetup, doUnlock, syncNow, updateItems, readLocal, writeLocal, setRoomRect, findShops, saveShops, savePlanBg, LS };
 boot();
 </script>
 </body>

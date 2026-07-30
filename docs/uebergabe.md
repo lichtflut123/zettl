@@ -8,7 +8,7 @@ Stand: 29. Juli 2026. Alles Folgende ist getestet, sofern nicht anders vermerkt.
 |---|---|
 | `index.html` | Die ganze App, eine Datei, 195 KB |
 | `preise.json` | 52.253 Artikel mit Preisen, 4,0 MB |
-| `test/agenten.mjs` | 171 Testagenten, die die App im Browser durchklicken |
+| `test/agenten.mjs` | 178 Testagenten, die die App im Browser durchklicken |
 | `server/` | Optionaler Preis-Server samt Importern |
 | `patches/hofer-fetcher-fix.patch` | Reparatur für heisse-preise (Hofer) |
 | `patches/dm-fetcher-fix.patch` | Reparatur für heisse-preise (dm) |
@@ -27,33 +27,37 @@ mit rund 200 Vorschlägen, Produktvorschläge je Aufgabe, Grundriss-Editor mit S
 **Technik**: Ende-zu-Ende verschlüsselt, Sync über eigene Supabase, Einladungs-Link,
 läuft offline, funktioniert bei gesperrtem Speicher und im Funkloch.
 
-## Nächster Schritt (Stand 29.07.2026, Abend)
+## Nächster Schritt (Stand 30.07.2026)
 
-**Auslieferungstor: ein Punkt fehlt, dann pushen und hochladen.**
+**Das Auslieferungstor ist durch.** Alle vier Punkte erledigt, dazu die Befunde eines
+Audits mit Gegenprobe: Sperren/Zurücksetzen während des Syncs (inkl. der Klartext-Lücke,
+wenn S.key UND S.vault zusammen wegfallen – jetzt hält `e2eJemals` dagegen), Zeitlimit
+für hängende Anfragen, sichtbare Speicherfehler, fremder Tresor hält den Sync an,
+Grabsteine für `plan` und `shops` (gelöschte Skizze und gelöschtes Zuhause bleiben
+gelöscht; `shops.file` fehlte im Merge und wurde von jedem Sync gelöscht), `vergessenAt`
+kommt nicht mehr zurück (`wiederAt` hält dagegen), keine Raumnamen mehr im Klartext
+(`zettl.zu` schlüsselt über die Raum-ID).
 
-Erledigt: Sperren/Zurücksetzen während des Syncs, Zeitlimit für hängende Anfragen,
-sichtbare Speicherfehler, fremder Tresor hält den Sync an.
-
-Offen: **Grabsteine für `plan` und `shops`.** Eine gelöschte Skizze und ein gelöschtes
-Zuhause kommen beim nächsten Sync zurück, weil „nicht vorhanden" nicht von „gelöscht"
-zu unterscheiden ist. Betrifft `syncNow` (Zweige `plan` und `shops`) und die Stellen,
-an denen gelöscht wird. `shops.list` ist bereits über `mergeItems` abgedeckt.
-
-Danach: `git push -u origin master`, dann den Ordner `D:\zettl-netlify-upload` bei
-Netlify ablegen. Beides braucht die GitHub- bzw. Netlify-Anmeldung des Nutzers.
+Gepusht als Erstpush nach Historien-Bereinigung (die echte Supabase-Adresse stand noch
+in sechs Altcommits); hochgeladen wird der Ordner `D:\zettl-netlify-upload` bei Netlify –
+das braucht die Netlify-Anmeldung des Nutzers.
 
 **Arbeitsweise, im Grilling am 29.07. festgelegt:** `npm run schnell` (1,3 s, gegen die
-echten Artikel) nach jeder Einzeländerung, `npm test` (171 Agenten, 8–10 min) vor jedem
+echten Artikel) nach jeder Einzeländerung, `npm test` (178 Agenten, 8–10 min) vor jedem
 Commit. Für jeden Bereich vorher ein Test, der ohne die Reparatur rot ist – wo jsdom das
 nicht hergibt (Layout, Ziehen), dazuschreiben statt einen Test erfinden.
 
 **Der volle Prüfbericht** mit 85 Funden aus 19 Agenten liegt unter
 `…\tasks\wkb9fcmda.output` (Sitzungsordner). Rund 55 echte Defekte, nach Schwere
 geordnet; abgearbeitet sind bisher die Suche, der Plan-Tab und der Sync-Cluster.
-Offen unter anderem: `vergessenAt` kommt beim Sync zurück, Sparplan-Zahlen mischen
-Packungspreise mit mengenbereinigten Ersparnissen, Barrierefreiheit, und die
-**ungemessene Leistungsfrage** – lineare Suche über 52.000 Einträge bei jedem
-Tastendruck, volles Neuzeichnen bei jedem Toast.
+Offen unter anderem: Sparplan-Zahlen mischen Packungspreise mit mengenbereinigten
+Ersparnissen, Barrierefreiheit, die **ungemessene Leistungsfrage** – lineare Suche über
+52.000 Einträge bei jedem Tastendruck, volles Neuzeichnen bei jedem Toast – und der
+**Uhrenversatz**: ein Handy mit falsch gehender Uhr verliert beim Merge seine Änderungen;
+die Serverzeit aus dem Date-Header wäre der Maßstab, ist aber ein Eingriff ins
+Merge-Verhalten und braucht eine eigene Entscheidung. Ebenso offen: `boot()` verschluckt
+„Datenbank nicht erreichbar" ohne Einladungslink und bietet den Anlege-Bildschirm an –
+wer dort tippt, spaltet den Haushalt.
 
 ## Offen – wichtig
 
@@ -96,7 +100,7 @@ Der Umzug ist erledigt: Das Projekt liegt als Git-Repository in `D:\zettl_app`, 
 oben beschriebenen Struktur. Die Testsuite läuft in einem Stück durch.
 
 ```bash
-npm test                   # node test/agenten.mjs, meldet 156/156, dauert Minuten
+npm test                   # node test/agenten.mjs, meldet 178/178, dauert Minuten
 ```
 
 Zwei Dinge, die beim Umzug angepasst wurden:

@@ -3903,6 +3903,65 @@ try {
   ok("Agent 172 – Alte Raumnamen verschwinden aus zettl.zu, der Rest bleibt stehen");
 } catch (e) { bad("Agent 172", e); }
 
+// ---------------- Agent 173: Gelöschte Skizze bleibt gelöscht
+// "Nicht vorhanden" war von "gelöscht" nicht zu unterscheiden – der nächste Sync
+// holte die Skizze vom anderen Handy zurück. Jetzt bleibt der Stempel als
+// Grabstein stehen, und je Geschoss gewinnt der jüngere.
+try {
+  REMOTE.clear();
+  const host = "https://skizze.supabase.co";
+  const { w } = makePhone({ "zettl.sync": JSON.stringify({ url: host, key: "k" }) });
+  await setup(w);
+  await w.__zettl.savePlanBg("Erdgeschoss", "data:image/png;base64,AAAA"); await sleep(600);
+  await w.__zettl.savePlanBg("Erdgeschoss", null); await sleep(600);
+  // Der Stand des anderen Handys: dort liegt die Skizze noch, mit ÄLTEREM Stempel
+  REMOTE.put(host, "plan", { bg: { "Erdgeschoss": "data:image/png;base64,AAAA" },
+                             bgAt: { "Erdgeschoss": Date.now() - 600000 } });
+  await w.__zettl.syncNow(true); await sleep(400);
+  const plan = await w.__zettl.readLocal("plan", { bg: {} });
+  if (plan.bg && plan.bg["Erdgeschoss"]) throw new Error("Die gelöschte Skizze ist zurückgekommen");
+  ok("Agent 173 – Gelöschte Skizze bleibt nach dem Sync gelöscht");
+} catch (e) { bad("Agent 173", e); }
+
+// ---------------- Agent 174: Gelöschtes Zuhause bleibt gelöscht
+// Der Lösch-Knopf schrieb home:null – und null verlor im Merge gegen jeden
+// alten Stand. Jetzt ist die Löschung ein Wert mit Stempel ({deleted:true,at}).
+try {
+  REMOTE.clear();
+  const host = "https://zuhause.supabase.co";
+  const { w } = makePhone({ "zettl.sync": JSON.stringify({ url: host, key: "k" }) });
+  await setup(w);
+  await w.__zettl.saveShops({ home: { lat: 48.2, lon: 14.285, at: Date.now() }, list: [] });
+  await sleep(600);
+  // Löschen über den echten Knopf im Läden-Dialog
+  click(w, "#settings"); await sleep(120);
+  click(w, "#openShops"); await sleep(120);
+  click(w, "#clearHome"); await sleep(600);
+  REMOTE.put(host, "shops", { home: { lat: 48.2, lon: 14.285, at: Date.now() - 600000 }, list: [] });
+  await w.__zettl.syncNow(true); await sleep(400);
+  const shops = await w.__zettl.readLocal("shops", { home: null, list: [] });
+  if (shops.home && !shops.home.deleted && shops.home.lat != null)
+    throw new Error("Das gelöschte Zuhause ist zurückgekommen: " + JSON.stringify(shops.home));
+  ok("Agent 174 – Gelöschtes Zuhause bleibt nach dem Sync gelöscht");
+} catch (e) { bad("Agent 174", e); }
+
+// ---------------- Agent 175: Die eigene Preisdatei-Adresse überlebt den Sync
+// shops.file fehlte im Merge – jeder Sync löschte die Adresse wieder.
+try {
+  REMOTE.clear();
+  const host = "https://datei.supabase.co";
+  const { w } = makePhone({ "zettl.sync": JSON.stringify({ url: host, key: "k" }) });
+  await setup(w);
+  await w.__zettl.saveShops(Object.assign({}, w.__zettl.S.shops,
+    { file: { url: "https://preise.test/preise.json", at: Date.now() } }));
+  await sleep(600);
+  await w.__zettl.syncNow(true); await sleep(400);
+  const shops = await w.__zettl.readLocal("shops", { home: null, list: [] });
+  if (!shops.file || shops.file.url !== "https://preise.test/preise.json")
+    throw new Error("Die Preisdatei-Adresse wurde vom Sync gelöscht: " + JSON.stringify(shops.file));
+  ok("Agent 175 – Die eigene Preisdatei-Adresse überlebt den Sync");
+} catch (e) { bad("Agent 175", e); }
+
 console.log("\n================ TESTLAUF ================");
 results.forEach(r => console.log((r[0] === "PASS" ? "✅" : "❌") + "  " + r[1] + (r[2] ? "\n     → " + r[2] : "")));
 const fails = results.filter(r => r[0] === "FAIL").length;
