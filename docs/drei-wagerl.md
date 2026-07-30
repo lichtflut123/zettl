@@ -70,7 +70,12 @@ unverändert: Nächste Woche derselbe Druck, frische Preise, angepasste Wagerl.
       sobald Zuhause und Läden im Spiel sind) und ein echter Test der
       Verlauf-zuerst-Regel (siehe Vermerk in `test/wagerl.mjs`).
     - **Etappe 2 – die Feinheiten:** Überschuss-Hinweis, Annahmetabelle
-      Stückware, Verlauf-schlägt-Vorlage-vor.
+      Stückware, Verlauf-schlägt-Vorlage-vor. **Gebaut am 30.07.2026,
+      Wagerl-Agenten 7–9 grün.** Der Überschuss hängt als Tausch-Angebot an
+      der Grundwahl (ab 50 Cent oder 10 %), die Stückgewichte stehen in
+      `STK_GRAMM` (sichtbare Annahme in kg, ehrliche Verweigerung ohne
+      Eintrag), die Verlauf-Chips nutzen die bestehende Rhythmus-Rechnung
+      aus zuletztGekauft().
     - **Etappe 3 – die Haltungshinweise:** CO₂-Tauschliste.
 
 ## Ehrlichkeits-Klausel

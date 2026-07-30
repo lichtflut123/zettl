@@ -171,4 +171,68 @@ try {
   ok("Wagerl 6 – Knappste Deckung: 1 kg exakt, 300 g mit einer 400-g-Packung, Hofer-Fußnote");
 } catch (e) { bad("Wagerl 6", e); }
 
+// ---------------- Wagerl 7: Überschuss-Hinweis (Entscheidung 6, Etappe 2)
+// Grundwahl bleibt die knappe Deckung (3 × 1 l = 3,96). Aber 2 × 2 l kostet
+// 3,38 – spart 0,58 €, also über der 50-Cent-Schwelle. Das gehört als Hinweis
+// dran, und ein Tipp tauscht. Kein Autokauf von Mehrmengen.
+try {
+  PREISDATEI.inhalt.artikel.push(["Clever Vollmilch", 1.69, "Billa", "2 l", 0, 0, 0, "kuehl"]);
+  const { w } = makePhone(); await setup(w);
+  click(w, "#openWagerl"); await sleep(150);
+  type(w, "#vorlageWas", "3 l Milch"); click(w, "#vorlageAdd"); await sleep(250);
+  click(w, "#wagerlRechnen");
+  await until(() => $(w, '[data-wagerl="guenstig"]'), "Wagerl-Karten");
+  let g = $(w, '[data-wagerl="guenstig"]').textContent;
+  if (!g.includes("3,96")) throw new Error("Grundwahl ist nicht die knappe Deckung: " + g.slice(0, 150));
+  if (!/statt/.test(g) || !g.includes("0,58")) throw new Error("Überschuss-Hinweis fehlt");
+  const tausch = $(w, "[data-wagerl-tausch]");
+  if (!tausch) throw new Error("Kein Tausch-Knopf am Hinweis");
+  tausch.dispatchEvent(new w.Event("click", { bubbles: true })); await sleep(250);
+  g = $(w, '[data-wagerl="guenstig"]').textContent;
+  if (!g.includes("2 ×") || !g.includes("3,38")) throw new Error("Tausch hat nicht gewechselt: " + g.slice(0, 150));
+  ok("Wagerl 7 – Überschuss als Hinweis mit Tausch, nie als Autokauf");
+} catch (e) { bad("Wagerl 7", e); }
+
+// ---------------- Wagerl 8: Annahmetabelle für Stückware (Entscheidung 7)
+// "6 Bananen" bei Kilo-Preis: sichtbare Annahme ("≈ 0,72 kg angenommen").
+// "2 Melonen" ohne Tabelleneintrag: ehrliche Verweigerung statt stiller Rechnung.
+try {
+  PREISDATEI.inhalt.artikel.push(["Bananen", 1.99, "Billa", "1 kg", 0, 0, 0, "obst"],
+                                 ["Melonen", 2.99, "Spar", "1 kg", 0, 0, 0, "obst"]);
+  const { w } = makePhone(); await setup(w);
+  click(w, "#openWagerl"); await sleep(150);
+  type(w, "#vorlageWas", "6 Bananen"); click(w, "#vorlageAdd"); await sleep(250);
+  type(w, "#vorlageWas", "2 Melonen"); click(w, "#vorlageAdd"); await sleep(250);
+  click(w, "#wagerlRechnen");
+  await until(() => $(w, '[data-wagerl="guenstig"]'), "Wagerl-Karten");
+  const g = $(w, '[data-wagerl="guenstig"]').textContent;
+  if (!g.includes("Bananen")) throw new Error("Bananen nicht besetzt");
+  if (!g.includes("angenommen") || !g.includes("0,72")) throw new Error("Annahme nicht offen ausgewiesen: " + g.slice(0, 200));
+  if (!g.includes("kein Stückgewicht")) throw new Error("Melonen: keine ehrliche Verweigerung");
+  ok("Wagerl 8 – Stückware: offene Annahme bei Bananen, ehrliche Verweigerung bei Melonen");
+} catch (e) { bad("Wagerl 8", e); }
+
+// ---------------- Wagerl 9: Der Verlauf schlägt der Vorlage vor (Entscheidung 12)
+// Beobachtet ist beobachtet, entschieden wird von euch: ein Chip im Dialog,
+// ein Tipp übernimmt. Steht der Begriff schon in der Vorlage, kein Chip mehr.
+try {
+  const { w } = makePhone(); await setup(w); await sleep(100);
+  const d = (tage) => { const x = new Date(Date.now() - tage*86400000);
+    return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); };
+  const key = w.eval("norm")("Milch");
+  const preise = {}; preise[key] = { byStore:{}, last:null, lastName:"Milch",
+    buys:[d(14), d(7), d(0)], updatedAt: Date.now() };
+  await w.__zettl.writeLocal("prices", preise);
+  w.__zettl.S.prices = preise;
+  click(w, "#openWagerl"); await sleep(200);
+  const chip = $(w, "[data-vorlage-vorschlag]");
+  if (!chip) throw new Error("Kein Vorschlag aus dem Verlauf");
+  if (!chip.textContent.includes("Milch")) throw new Error("Vorschlag zeigt den falschen Begriff");
+  chip.dispatchEvent(new w.Event("click", { bubbles: true })); await sleep(400);
+  const vorlage = (await w.__zettl.readLocal("vorlage", [])).filter(v => !v.deleted);
+  if (!vorlage.some(v => /milch/i.test(v.name))) throw new Error("Übernahme in die Vorlage fehlt");
+  if ($(w, "[data-vorlage-vorschlag]")) throw new Error("Chip bleibt stehen, obwohl der Begriff schon drin ist");
+  ok("Wagerl 9 – Verlauf schlägt vor, ein Tipp übernimmt, kein doppelter Chip");
+} catch (e) { bad("Wagerl 9", e); }
+
 fazit();

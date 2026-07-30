@@ -1140,11 +1140,33 @@ function wagerlKandidaten(begriff){
   return treffer;
 }
 
+// Entscheidung 7: Stückgewichte für Stückware, die je Kilo gepreist ist –
+// klein, kuratiert, und jede Annahme steht sichtbar in der Zeile. Formen
+// ausgeschrieben (Ein- und Mehrzahl), damit kein Ratespiel entsteht.
+const STK_GRAMM = { banane:120, bananen:120, apfel:180, aepfel:180, ei:60, eier:60,
+  semmel:60, semmeln:60, zitrone:100, zitronen:100, orange:180, orangen:180,
+  zwiebel:100, zwiebeln:100, erdapfel:120, erdaepfel:120, paradeiser:100, gurke:400, gurken:400 };
+function stkGramm(begriff){
+  for(const wort of norm(begriff).split(" ")) if(STK_GRAMM[wort]) return STK_GRAMM[wort];
+  return null;
+}
+// Menge menschlich: 4000 ml → "4 l", 720 g → "0,72 kg", 6 stk → "6 Stück"
+function mengeText(b){
+  if(!b) return "";
+  if(b.art==="stk") return b.menge+" Stück";
+  const kg = b.art==="g";
+  return b.menge>=1000 ? String(Math.round(b.menge/10)/100).replace(".",",")+(kg?" kg":" l")
+                       : b.menge+(kg?" g":" ml");
+}
+
 // Knappste Deckung: kleinste Gesamtmenge >= Ziel, bei Gleichstand die billigste.
 // Ein Produkt je Position, n-mal dieselbe Packung – Mischungen sind Etappe 2.
 // Ohne Ziel (Position ohne Menge): 1 Packung, offen ausgewiesen.
+// Entscheidung 6: Überschuss nie als Autokauf – aber wenn MEHR Ware spürbar
+// billiger kommt (ab 50 Cent oder 10 %), hängt die billigste Deckung als
+// Tausch-Angebot an der Grundwahl.
 function wagerlDeckung(kandidaten, ziel){
-  let best = null;
+  let best = null, billig = null;
   for(const h of kandidaten){
     const b = wagerlBasis(h.unit);
     let n = 1, gesamt = null;
@@ -1158,6 +1180,11 @@ function wagerlDeckung(kandidaten, ziel){
     if(!best
        || (ziel && (gesamt < best.gesamt || (gesamt === best.gesamt && kosten < best.kosten)))
        || (!ziel && kosten < best.kosten)) best = kand;
+    if(ziel && (!billig || kosten < billig.kosten)) billig = kand;
+  }
+  if(best && billig && billig.kosten < best.kosten){
+    const spart = best.kosten - billig.kosten;
+    if(spart >= 0.5 || spart >= 0.1*best.kosten) best.alternative = Object.assign({ spart }, billig);
   }
   return best;
 }
@@ -1167,20 +1194,36 @@ function wagerlDeckung(kandidaten, ziel){
 // und die Lücke gezählt (Entscheidung 8) statt still das Nächstbeste zu behaupten.
 function wagerlPosten(v, flag){
   const mg = vorlageMenge(v.name);
-  const ziel = wagerlZiel(mg);
+  let ziel = wagerlZiel(mg);
   const alle = wagerlKandidaten(mg.rest);
-  const posten = { id: v.id, begriff: mg.rest, menge: mg, produkt: null, luecke: null };
+  const posten = { id: v.id, begriff: mg.rest, menge: mg, ziel, produkt: null, luecke: null };
   if(!alle.length){ posten.luecke = "fehlt"; return posten; }
   let kreis = alle, markiert = true;
   if(flag){
     kreis = alle.filter(h => h[flag]);
     if(!kreis.length){ kreis = alle; markiert = false; }
   }
-  const wahl = wagerlDeckung(kreis, ziel) || wagerlDeckung(alle, ziel);
+  let wahl = wagerlDeckung(kreis, ziel) || wagerlDeckung(alle, ziel);
+  // Stückzahl bestellt, aber nur Kilo-Ware im Regal: über die Annahmetabelle
+  // brücken – die Annahme steht dann sichtbar in der Zeile. Ohne Eintrag wird
+  // ehrlich verweigert statt still gerechnet (Entscheidung 7).
+  if(!wahl && ziel && ziel.art === "stk"){
+    const g = stkGramm(mg.rest);
+    if(g){
+      const zielG = { menge: ziel.menge * g, art: "g" };
+      wahl = wagerlDeckung(kreis, zielG) || wagerlDeckung(alle, zielG);
+      if(wahl){ posten.annahme = { stueck: ziel.menge, gramm: ziel.menge * g }; posten.ziel = zielG; }
+    } else { posten.luecke = "stkgewicht"; return posten; }
+  }
   if(!wahl){ posten.luecke = "einheit"; return posten; }   // Menge passt zu keiner Packung
-  posten.produkt = { name: wahl.h.name, unit: wahl.h.unit, n: wahl.n,
-    preis: wahl.h.best.price, laden: wahl.h.best.store, kosten: wahl.kosten,
-    cat: wahl.h.cat || null, ohneMenge: !ziel };
+  const alsProdukt = (k) => ({ name: k.h.name, unit: k.h.unit, n: k.n,
+    preis: k.h.best.price, laden: k.h.best.store, kosten: k.kosten,
+    gesamt: k.gesamt, cat: k.h.cat || null, ohneMenge: !ziel });
+  posten.produkt = alsProdukt(wahl);
+  if(wahl.alternative){
+    posten.alternative = alsProdukt(wahl.alternative);
+    posten.alternative.spart = wahl.alternative.spart;
+  }
   if(flag && !markiert) posten.luecke = flag;
   return posten;
 }
@@ -1188,21 +1231,23 @@ function wagerlPosten(v, flag){
 // Alle drei Wagerl auf einmal. Rechnet über die Läden des Datensatzes und weist
 // die Aufteilung aus (Entscheidung 9); Wegkosten kommen aus dem Sparplan-Rahmen,
 // sobald Zuhause und Läden gesetzt sind – hier zählt erst die ehrliche Grundlage.
+// Posten zu einer Karte zusammenfassen – auch nach einem Tausch aufrufbar,
+// damit Summe und Ladenaufteilung nie vom angezeigten Inhalt abweichen.
+function wagerlFasse(posten){
+  let summe = 0, offen = 0, luecken = 0;
+  const laeden = {};
+  for(const p of posten){
+    if(p.produkt){
+      summe += p.produkt.kosten;
+      laeden[p.produkt.laden] = (laeden[p.produkt.laden]||0) + 1;
+      if(p.luecke === "bio" || p.luecke === "regional") luecken++;
+    } else offen++;
+  }
+  return { posten, summe, offen, luecken, laeden };
+}
 function dreiWagerl(){
   const vorlage = visible(S.vorlage);
-  const mach = (flag) => {
-    const posten = vorlage.map(v => wagerlPosten(v, flag));
-    let summe = 0, offen = 0, luecken = 0;
-    const laeden = {};
-    for(const p of posten){
-      if(p.produkt){
-        summe += p.produkt.kosten;
-        laeden[p.produkt.laden] = (laeden[p.produkt.laden]||0) + 1;
-        if(p.luecke) luecken++;
-      } else offen++;
-    }
-    return { posten, summe, offen, luecken, laeden };
-  };
+  const mach = (flag) => wagerlFasse(vorlage.map(v => wagerlPosten(v, flag)));
   return { guenstig: mach(null), regional: mach("regional"), bio: mach("bio") };
 }
 
@@ -3453,6 +3498,19 @@ function modalWagerl(){
    + '<div style="margin-top:14px"><label class="lbl">Position</label>'
    + '<div class="row"><div class="field grow"><input id="vorlageWas" placeholder="z. B. 3 l Milch" autocapitalize="off" autocorrect="off" spellcheck="false"></div>'
    + '<button class="btn" id="vorlageAdd" style="height:44px;width:auto;padding:0 16px;flex:0 0 auto">Dazu</button></div></div>'
+   // Entscheidung 12: der Verlauf beobachtet und schlägt vor, entschieden wird
+   // hier. Nur Begriffe, die noch nicht in der Vorlage stehen.
+   + (() => {
+       const drin = new Set(list.map(v => norm(vorlageMenge(v.name).rest)));
+       const tipps = zuletztGekauft().filter(z => !drin.has(norm(nameOhneGroesse(z.name)))).slice(0, 4);
+       return tipps.length
+         ? '<div class="muted" style="margin-top:10px">Aus dem Verlauf:</div>'
+           + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">'
+           + tipps.map(z => '<button class="link" data-vorlage-vorschlag="'+esc(z.name)+'" style="border:1px solid var(--soft);border-radius:14px;padding:4px 10px">'
+               + esc(z.name)+(z.schnitt ? ' <span style="opacity:.6">· alle '+z.schnitt+' T.</span>' : '')+'</button>').join("")
+           + '</div>'
+         : '';
+     })()
    + '<div style="margin-top:12px">'+(rows || '<div class="muted">Noch leer. Trag ein, was ihr regelmäßig kauft.</div>')+'</div>'
    + (list.length ? '<button class="btn'+(S.wagerlBusy?" off":"")+'" id="wagerlRechnen" style="margin-top:14px"'+(S.wagerlBusy?" disabled":"")+'>'
        + (S.wagerlBusy ? "Rechne …" : "Drei Wagerl rechnen") + '</button>' : '')
@@ -3468,14 +3526,30 @@ function wagerlKarten(){
   for(const k of ["guenstig","regional","bio"]){
     const wv = S.wagerl[k]; if(!wv) continue;
     const zeilen = wv.posten.map(p => {
-      if(!p.produkt)
-        return '<div class="muted" style="margin-top:4px">'+esc(p.begriff)+' – nichts im Datensatz gefunden, bleibt wie getippt</div>';
+      if(!p.produkt){
+        // Ehrlich unterscheiden: gar kein Treffer vs. Stückzahl ohne Stückgewicht
+        const grund = p.luecke === "stkgewicht"
+          ? 'je Kilo gepreist, und ich kenne kein Stückgewicht – bitte Menge in g oder kg angeben'
+          : p.luecke === "einheit"
+          ? 'die Menge passt zu keiner bekannten Packung'
+          : 'nichts im Datensatz gefunden, bleibt wie getippt';
+        return '<div class="muted" style="margin-top:4px">'+esc(p.begriff)+' – '+grund+'</div>';
+      }
       const pr = p.produkt;
-      return '<div style="margin-top:4px;display:flex;justify-content:space-between;gap:8px">'
+      let z = '<div style="margin-top:4px;display:flex;justify-content:space-between;gap:8px">'
         + '<span>'+(pr.n>1 ? pr.n+' × ' : '')+esc(pr.name)+(pr.unit ? ' <span style="opacity:.6">('+esc(pr.unit)+')</span>' : '')
         + (pr.ohneMenge ? ' <span style="opacity:.6">· Menge offen, 1 Packung angenommen</span>' : '')
+        // Konzepttext (Entscheidung 7): "6 Bananen ≈ 0,72 kg angenommen" – immer
+        // in kg, damit die Annahme neben dem Kilopreis der Ware lesbar ist
+        + (p.annahme ? ' <span style="opacity:.6">· '+p.annahme.stueck+' Stück ≈ '+String(Math.round(p.annahme.gramm/10)/100).replace(".",",")+' kg angenommen</span>' : '')
         + (p.luecke && flagText[p.luecke] ? ' <span style="opacity:.6">· '+flagText[p.luecke]+'</span>' : '')
         + '</span><span style="flex:0 0 auto">'+esc(pr.laden)+' · '+esc(euro(pr.kosten))+'</span></div>';
+      // Entscheidung 6: die billigere Mehr-Menge nur als Angebot, nie als Autokauf
+      if(p.alternative)
+        z += '<div class="muted" style="margin-top:2px;padding-left:12px">'+esc(mengeText({menge:p.alternative.gesamt, art:(p.ziel||{}).art||"g"}))
+          + ' statt '+esc(mengeText(p.ziel))+', spart '+esc(euro(p.alternative.spart))
+          + ' · <button class="link" data-wagerl-tausch="'+k+'|'+esc(p.id)+'">tauschen</button></div>';
+      return z;
     }).join("");
     const laeden = Object.keys(wv.laeden).sort((a,b)=>wv.laeden[b]-wv.laeden[a])
       .map(l => wv.laeden[l]+" bei "+esc(l)).join(", ");
@@ -3940,6 +4014,24 @@ function wireModal(){
     const id=b.getAttribute("data-vorlage-del");
     S.wagerl = null;
     updateVorlage(list => list.map(v => v.id===id ? Object.assign({}, v, {deleted:true, updatedAt:now()}) : v));
+  });
+  // Überschuss-Tausch: die billigere Mehr-Menge übernehmen, Summe und
+  // Ladenaufteilung sofort ehrlich nachziehen (Entscheidung 6).
+  document.querySelectorAll("[data-wagerl-tausch]").forEach(b => b.onclick = () => {
+    const teile = b.getAttribute("data-wagerl-tausch").split("|");
+    const wv = S.wagerl && S.wagerl[teile[0]]; if(!wv) return;
+    const p = wv.posten.find(x => x.id === teile[1]); if(!p || !p.alternative) return;
+    p.produkt = p.alternative; delete p.alternative;
+    S.wagerl[teile[0]] = wagerlFasse(wv.posten);
+    render();
+  });
+  // Vorschlag aus dem Verlauf in die Vorlage übernehmen (Entscheidung 12)
+  document.querySelectorAll("[data-vorlage-vorschlag]").forEach(b => b.onclick = async () => {
+    const n = b.getAttribute("data-vorlage-vorschlag"); if(!n) return;
+    const neu = norm(vorlageMenge(n).rest);
+    if((S.vorlage||[]).some(v => !v.deleted && norm(vorlageMenge(v.name).rest)===neu)) return;
+    S.wagerl = null;
+    await updateVorlage(list => list.concat([{ id:uid(), name:n, updatedAt:now() }]));
   });
   const wr=$("#wagerlRechnen"); if(wr) wr.onclick = async () => {
     S.wagerlBusy = true; render();
