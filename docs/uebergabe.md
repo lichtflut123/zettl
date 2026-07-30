@@ -39,8 +39,11 @@ kommt nicht mehr zurück (`wiederAt` hält dagegen), keine Raumnamen mehr im Kla
 (`zettl.zu` schlüsselt über die Raum-ID).
 
 Gepusht als Erstpush nach Historien-Bereinigung (die echte Supabase-Adresse stand noch
-in sechs Altcommits); hochgeladen wird der Ordner `D:\zettl-netlify-upload` bei Netlify –
-das braucht die Netlify-Anmeldung des Nutzers.
+in sechs Altcommits). Seit 30.07. abends liegt das Repo unter
+`github.com/lichtflut123/zettl` (privat, Zweig `main`), und **Netlify deployt jeden
+Push automatisch**: `https://adorable-donut-d54519.netlify.app` (öffentlich erreichbar,
+zufälliger Name als milder Sichtschutz; umbenennen ginge unter Domain management).
+Der alte Weg über den Ordner `D:\zettl-netlify-upload` ist damit Geschichte.
 
 **Arbeitsweise, nachgeschärft am 30.07.:** `npm run schnell` (1,3 s, gegen die echten
 Artikel) nach jeder Einzeländerung, die **Bereichs-Agenten** (`npm run wagerl`) vor jedem
