@@ -1,171 +1,149 @@
 # Zettl – Stand und offene Punkte
 
-Stand: 29. Juli 2026. Alles Folgende ist getestet, sofern nicht anders vermerkt.
+Stand: 30. Juli 2026, abends. Alles Folgende ist getestet, sofern nicht anders vermerkt.
 
 ## Was es gibt
 
 | Datei | Zweck |
 |---|---|
-| `index.html` | Die ganze App, eine Datei, 195 KB |
-| `preise.json` | 52.253 Artikel mit Preisen, 4,0 MB |
-| `test/agenten.mjs` | 178 Testagenten, die die App im Browser durchklicken |
+| `index.html` | Die ganze App, eine Datei, 250 KB |
+| `preise.json` | 52.253 Artikel mit Preisen, 4,2 MB |
+| `test/agenten.mjs` | 178 Testagenten, die die App in jsdom durchklicken |
+| `test/harness.mjs` | Gemeinsames Test-Geschirr (Attrappen, makePhone, Helfer) |
+| `test/wagerl.mjs` | 10 Bereichs-Agenten „Drei Wagerl" (`npm run wagerl`, Sekunden) |
+| `test/schnell.mjs` | Kern-Check gegen die echte Preisdatei (`npm run schnell`, 1,3 s) |
 | `server/` | Optionaler Preis-Server samt Importern |
-| `patches/hofer-fetcher-fix.patch` | Reparatur für heisse-preise (Hofer) |
-| `patches/dm-fetcher-fix.patch` | Reparatur für heisse-preise (dm) |
+| `patches/` | Reparaturen für die heisse-preise-Abrufer (nur noch Beleg, s. u.) |
+| `docs/drei-wagerl.md` | Konzept „Drei Wagerl" mit allen 14 Entscheidungen |
 | `docs/befund-abrufer.md` | Untersuchung, welche Ketten warum stillstehen |
+
+## Auslieferung (seit 30.07. abends komplett)
+
+- **Code:** `github.com/lichtflut123/zettl` – privat, ein Zweig `main`, Historie
+  bereinigt (die echte Supabase-Adresse ist aus allen Commits entfernt).
+- **Ausliefern heißt: committen und pushen.** Netlify deployt jeden Push
+  automatisch auf `https://adorable-donut-d54519.netlify.app` (öffentlich;
+  der zufällige Name bleibt bewusst als milder Sichtschutz). Ausgeliefert wird
+  das ganze Repo, nicht nur die App – Geheimnisse liegen keine darin.
+- **Daten:** Supabase (Tabelle `zettl`) speichert nur Verschlüsseltes und ist
+  aktiv. Die App-Adresse ist für Supabase egal; beim Umzug auf eine neue
+  Adresse verbindet sich jedes Handy einmal neu („Zu bestehendem verbinden"
+  bzw. Einladungslink), der Sync holt alles zurück.
+- Der frühere Upload-Ordner `D:\zettl-netlify-upload` ist obsolet, die beiden
+  toten Repos (`gunthermuhlehner-glitch/zettl`, `lichtflut11/zettl`) können
+  gelöscht werden.
 
 ## Was fertig ist
 
-**Einkaufen**: Liste zu zweit, nach Marktreihenfolge gruppiert, Warengruppen mit Symbolen,
-Artikel vollständig bearbeitbar, Preisgedächtnis je Laden, Kostenkarte, Kilopreis,
-Sparplan mit Ladenaufteilung und Wegkosten, wiederkehrende Einkäufe, Produktsuche in
-52.253 Artikeln, Bio- und Regional-Kennzeichnung, Klimabilanz.
+**Einkaufen**: Liste zu zweit, nach Marktreihenfolge gruppiert, Warengruppen mit
+Symbolen, Artikel vollständig bearbeitbar, Preisgedächtnis je Laden, Kostenkarte,
+Kilopreis, Sparplan mit Ladenaufteilung und Wegkosten, wiederkehrende Einkäufe,
+Produktsuche in 52.253 Artikeln, Bio- und Regional-Kennzeichnung, Klimabilanz.
 
-**Haushalt**: Aufgaben mit Räumen, Geschossen, Wiederholung, Überspringen, 26 Raumtypen
-mit rund 200 Vorschlägen, Produktvorschläge je Aufgabe, Grundriss-Editor mit Skizze.
+**Drei Wagerl** (neu, 30.07., Konzept mit allen Entscheidungen in
+`docs/drei-wagerl.md`): Eine dauerhafte **Vorlage** aus Oberbegriffen mit Menge
+(„3 l Milch", „6 Bananen") wird per Knopf in drei fertige Einkaufsvarianten
+aufgelöst – **Da Spoarer, Da Regionale, Da Öko**. Knappste Packungsdeckung als
+Grundwahl, Mehr-Menge nur als Tausch-Angebot (ab 50 Cent oder 10 %), kuratierte
+Stückgewichte mit sichtbarer Annahme („6 Bananen ≈ 0,72 kg angenommen"),
+CO₂-Tauschhinweise nur im Öko-Wagerl in Größenordnungssprache, ehrliche Lücken
+statt stiller Ersatzwahl, Hofer-Fußnote. „Dieses Wagerl nehmen" **ergänzt** den
+heutigen Zettel (probeweise Entscheidung 11 – nach der ersten Alltagswoche
+prüfen). Der Verlauf schlägt der Vorlage Begriffe vor, entschieden wird per Tipp.
 
-**Technik**: Ende-zu-Ende verschlüsselt, Sync über eigene Supabase, Einladungs-Link,
-läuft offline, funktioniert bei gesperrtem Speicher und im Funkloch.
+**Haushalt**: Aufgaben mit Räumen, Geschossen, Wiederholung, Überspringen,
+26 Raumtypen mit rund 200 Vorschlägen, Produktvorschläge je Aufgabe,
+Grundriss-Editor mit Skizze.
 
-## Nächster Schritt (Stand 30.07.2026)
+**Technik**: Ende-zu-Ende verschlüsselt, Sync über eigene Supabase,
+Einladungs-Link, läuft offline, funktioniert bei gesperrtem Speicher und im
+Funkloch. Der Sync-Cluster wurde am 30.07. auditiert und repariert: Sperren und
+Zurücksetzen während eines Syncs können keinen Klartext mehr erzeugen
+(`e2eJemals`), ein fremder Tresor hält den Sync an (getestet), gelöschte
+Verläufe kommen nicht mehr per Merge zurück (`wiederAt`), Netzanfragen haben
+ein Zeitlimit, Raumnamen liegen nicht mehr im Klartext im Speicher.
 
-**Das Auslieferungstor ist durch.** Alle vier Punkte erledigt, dazu die Befunde eines
-Audits mit Gegenprobe: Sperren/Zurücksetzen während des Syncs (inkl. der Klartext-Lücke,
-wenn S.key UND S.vault zusammen wegfallen – jetzt hält `e2eJemals` dagegen), Zeitlimit
-für hängende Anfragen, sichtbare Speicherfehler, fremder Tresor hält den Sync an,
-Grabsteine für `plan` und `shops` (gelöschte Skizze und gelöschtes Zuhause bleiben
-gelöscht; `shops.file` fehlte im Merge und wurde von jedem Sync gelöscht), `vergessenAt`
-kommt nicht mehr zurück (`wiederAt` hält dagegen), keine Raumnamen mehr im Klartext
-(`zettl.zu` schlüsselt über die Raum-ID).
+## Arbeitsweise (Festlegung vom 30.07., ersetzt „npm test nach jeder Änderung")
 
-Gepusht als Erstpush nach Historien-Bereinigung (die echte Supabase-Adresse stand noch
-in sechs Altcommits). Seit 30.07. abends liegt das Repo unter
-`github.com/lichtflut123/zettl` (privat, Zweig `main`), und **Netlify deployt jeden
-Push automatisch**: `https://adorable-donut-d54519.netlify.app` (öffentlich erreichbar,
-zufälliger Name als milder Sichtschutz; umbenennen ginge unter Domain management).
-Der alte Weg über den Ordner `D:\zettl-netlify-upload` ist damit Geschichte.
-
-**Arbeitsweise, nachgeschärft am 30.07.:** `npm run schnell` (1,3 s, gegen die echten
-Artikel) nach jeder Einzeländerung, die **Bereichs-Agenten** (`npm run wagerl`) vor jedem
-Commit, die **volle Suite** (`npm test`, 8–10 min) am Etappenende und vor jedem Push.
-Für jeden Bereich vorher ein Test, der ohne die Reparatur rot ist – wo jsdom das nicht
-hergibt (Layout, Ziehen), dazuschreiben statt einen Test erfinden. Gebaut wird solo;
-Subagenten nur an Etappen-Enden (Audit) oder auf Ansage. Das gemeinsame Test-Geschirr
-liegt in `test/harness.mjs`.
-
-**Nächstes Bauvorhaben: „Drei Wagerl"** – ein Zettel aus Oberbegriffen mit Mengen wird
-in drei fertige Einkaufsvarianten aufgelöst (günstig – regional – bio). Konzept samt
-14 Entscheidungen aus dem Grill-Durchgang: `docs/drei-wagerl.md`. Etappe 1 (Gerüst)
-ist begonnen; Entscheidung 11 (Vorlage als zweite Liste, Zettel bleibt der heutige)
-gilt probeweise und wird nach Etappe 1 erneut gegrillt.
-
-**Der volle Prüfbericht** mit 85 Funden aus 19 Agenten liegt unter
-`…\tasks\wkb9fcmda.output` (Sitzungsordner). Rund 55 echte Defekte, nach Schwere
-geordnet; abgearbeitet sind bisher die Suche, der Plan-Tab und der Sync-Cluster.
-Offen unter anderem: Sparplan-Zahlen mischen Packungspreise mit mengenbereinigten
-Ersparnissen, Barrierefreiheit, die **ungemessene Leistungsfrage** – lineare Suche über
-52.000 Einträge bei jedem Tastendruck, volles Neuzeichnen bei jedem Toast – und der
-**Uhrenversatz**: ein Handy mit falsch gehender Uhr verliert beim Merge seine Änderungen;
-die Serverzeit aus dem Date-Header wäre der Maßstab, ist aber ein Eingriff ins
-Merge-Verhalten und braucht eine eigene Entscheidung. Ebenso offen: `boot()` verschluckt
-„Datenbank nicht erreichbar" ohne Einladungslink und bietet den Anlege-Bildschirm an –
-wer dort tippt, spaltet den Haushalt.
+`npm run schnell` (1,3 s) nach jeder Einzeländerung → **Bereichs-Agenten**
+(z. B. `npm run wagerl`) vor jedem Commit → **volle Suite** (`npm test`,
+8–10 min, 178 + 10 Agenten) am Etappenende und vor jedem Push. Für jeden
+Bereich zuerst ein Agent, der ohne die Änderung rot ist; wo die Testumgebung
+oder die Datenlage das nicht hergibt, wird es im Test **dazugeschrieben**
+statt einen Scheintest zu erfinden (Beispiel: Verlauf-zuerst-Regel, Vermerk am
+Kopf von `test/wagerl.mjs`). Subagenten/Workflows nur an Etappen-Enden oder
+auf ausdrückliche Ansage.
 
 ## Offen – wichtig
 
-1. **Preisdatei aktualisiert sich nicht selbst.** Aktuell erzeugt Claude sie auf Zuruf
-   und ihr ladet sie hoch. Sauber wäre: GitHub Action oder Cron, die wöchentlich
-   `build-preisdatei.js` ausführt und die Datei neben die App legt.
-2. **Datenvolumen prüfen.** Die App lädt `preise.json` (3,5 MB) beim ersten Tippen jeder
-   Sitzung. Im WLAN egal, unterwegs womöglich nicht. Zu klären: Zwischenspeicherung über
-   Service Worker oder IndexedDB, damit nur bei neuem Stand geladen wird.
-3. **Hofer liefert nur 2.070 Artikel** – roksh.at listet für Hofer offenbar nur einen
-   Teil des Sortiments. Spar (22.309) und Billa (12.063) sind vollständig.
-4. **Sync und Preisdatei zusammen** sind einzeln getestet, aber noch nie eine Woche im
-   echten Alltag zu zweit gelaufen.
+1. **Preisdatei aktualisiert sich nicht selbst.** Nächster Auftrag: GitHub
+   Action, wöchentlich montags um 4 Uhr, führt `server/build-preisdatei.js`
+   aus und committet `preise.json` – der Commit deployt dann von selbst.
+   Billa und Spar frisch aus dem veröffentlichten Datensatz; die vorhandenen
+   **Hofer- und dm-Zeilen bleiben stehen** (bekräftigt am 30.07., Regel in
+   CLAUDE.md; die Patches in `patches/` sind nur noch Beleg).
+2. **Datenvolumen prüfen.** Die App lädt `preise.json` (4,2 MB) beim ersten
+   Tippen jeder Sitzung. Zwischenspeicherung über Service Worker oder
+   IndexedDB wäre der saubere Weg.
+3. **Die Alltagswoche zu zweit beginnt erst jetzt.** Sync und Preisdatei
+   zusammen sind einzeln getestet, aber nie eine Woche echt gelaufen. Dabei
+   mitprüfen: trägt Entscheidung 11 (Wagerl ergänzt den Zettel, Vorlage bleibt)?
+4. **Uhrenversatz beim Merge** (offener Befund): ein Handy mit falsch gehender
+   Uhr verliert Änderungen und kann nichts löschen. Saubere Lösung wäre die
+   Serverzeit aus dem Date-Header – ändert das Merge-Verhalten, braucht eine
+   eigene Entscheidung.
+5. **boot() verschluckt „Datenbank nicht erreichbar"** (offener Befund): ohne
+   Einladungslink erscheint der Anlege-Bildschirm, und wer dort tippt, spaltet
+   den Haushalt. Reparatur klar, Formulierung des Hinweises ist offen.
+6. **Sparplan mischt Packungspreise mit mengenbereinigten Ersparnissen**
+   (offener Befund aus der Prüfrunde vom 29.07.). Die Drei-Wagerl-Rechnung
+   macht es richtig (Grundpreis, knappste Deckung) – der alte Sparplan-Dialog
+   noch nicht.
+7. **Hofer liefert nur 2.070 Artikel** – roksh.at listet offenbar nur einen
+   Teil. Die Wagerl-Karten sagen es ehrlich dazu (Fußnote).
+
+Der Prüfbericht vom 29.07. (85 Funde, 19 Agenten) existiert als Datei nicht
+mehr; abgearbeitet sind Suche, Plan-Tab und der komplette Sync-Cluster. Die
+Punkte 4–6 oben sind seine wesentlichen offenen Reste.
 
 ## Offen – nice to have
 
-5. **Erinnerungen** bei fälligen Aufgaben. Braucht Service Worker und auf iOS eine über
-   den Home-Bildschirm installierte App. Ohne das nur, solange die App offen ist.
-6. **Produktbilder** gibt es nur bei Treffern aus Open Food Facts; der heisse-preise-
-   Datensatz enthält keine. Zusammenführen ginge über die Barcodes.
-7. **Aktionen** werden bisher nur erkannt, wenn der Preis gefallen ist. Flugblätter
-   separat auslesen wäre genauer.
-8. **Mengenangaben fehlen** bei manchen Artikeln, dann ist kein Kilopreis möglich.
-9. **MPREIS und BIPA** sind bewusst nicht repariert – dort wäre es Neuentwicklung gegen
-   undokumentierte Schnittstellen, siehe `befund-abrufer.md`.
-10. **Skizze automatisch in Räume umwandeln** (heute: Skizze als Hintergrund, Räume von
-    Hand darüberschieben).
-11. **Mehr als zwei Personen**, Gäste, Datenexport als Sicherung.
+8. **Erinnerungen** bei fälligen Aufgaben (Service Worker, iOS nur als
+   installierte App).
+9. **Produktbilder** nur aus Open Food Facts; Zusammenführen ginge über Barcodes.
+10. **Aktionen** werden nur als gefallener Preis erkannt; Flugblätter wären genauer.
+11. **Mengenangaben fehlen** bei manchen Artikeln – dann kein Kilopreis und
+    keine Wagerl-Deckung („die Menge passt zu keiner bekannten Packung").
+12. **MPREIS und BIPA** bewusst nicht repariert (`befund-abrufer.md`).
+13. **Skizze automatisch in Räume umwandeln.**
+14. **Mehr als zwei Personen**, Gäste, Datenexport als Sicherung.
+15. **Drei Wagerl weiterdenken:** Wegkosten-Zeile in den Karten (sobald
+    Zuhause und Läden gesetzt sind), echter Test der Verlauf-zuerst-Regel,
+    `CO2_TAUSCH` und `STK_GRAMM` wachsen nur, wenn ihr etwas vermisst.
 
 ## Bekannte Grenzen
 
-- Die Klimabilanz ist eine Größenordnung, kein Messwert.
-- Bei handgetippten Artikeln nimmt der Sparplan das ähnlichste Produkt – das kann daneben
-  liegen, deshalb der Hinweis im Dialog.
-- Die volle Testsuite braucht mehrere Minuten und läuft im Chat nicht mehr in einem Stück.
+- Die Klimabilanz ist eine Größenordnung, kein Messwert – auch die
+  CO₂-Tauschhinweise sprechen deshalb nur in Größenordnungen.
+- Die Stückgewichte in `STK_GRAMM` sind Durchschnitte; jede Annahme steht
+  sichtbar in der Zeile, Bund-Ware wird ehrlich verweigert.
+- Bei handgetippten Artikeln nimmt der Sparplan das ähnlichste Produkt – das
+  kann daneben liegen, deshalb der Hinweis im Dialog.
+- Die volle Testsuite braucht 8–10 Minuten; unter Last (parallele Agenten)
+  kann ein einzelner Timeout-Agent flackern – im Zweifel allein wiederholen.
 
 ## Weiterarbeiten in Claude Code
 
-Der Umzug ist erledigt: Das Projekt liegt als Git-Repository in `D:\zettl_app`, in der
-oben beschriebenen Struktur. Die Testsuite läuft in einem Stück durch.
-
 ```bash
-npm test                   # node test/agenten.mjs, meldet 178/178, dauert Minuten
+npm run schnell   # Kern-Check, 1,3 s
+npm run wagerl    # Bereichs-Suite Drei Wagerl, Sekunden
+npm test          # volle Suite: 178 + 10 Agenten, 8-10 min
 ```
 
-Zwei Dinge, die beim Umzug angepasst wurden:
-
-- Der Pfad zur App in `test/agenten.mjs` zeigt jetzt auf `./index.html`; der Test muss
-  deshalb aus dem Projektstamm laufen.
-- jsdom 26 stellt `TextEncoder`/`TextDecoder` im Fenster nicht bereit. Beide werden in
-  `beforeParse` nachgereicht, so wie dort schon `crypto` und `fetch`. Ohne das startet
-  die App in der Testumgebung überhaupt nicht – im echten Browser ist alles in Ordnung.
-
-Wichtig hier: **Vor jeder Änderung committen, nach jeder Änderung Tests laufen lassen.**
-Die Agenten haben in diesem Projekt zehn echte Fehler gefunden, darunter Datenverlust
-bei schnellen Eingaben – ohne sie wäre das erst euch im Supermarkt aufgefallen.
-
-### Preisdatei: die acht Felder
-
-`build-preisdatei.js` schrieb früher nur fünf Felder je Artikel. Die App liest acht –
-zusätzlich Bio, Regional und die Warengruppe. Das ist nachgezogen:
-
-- **Bio** kommt aus dem Datensatz (`item.bio`, bei Spar aus `biolevel`), ergänzt um den
-  Namen, wenn „Bio“ dort als eigenes Wort steht. Die Eigenmarken sind im Datensatz
-  lückenhaft gekennzeichnet.
-- **Warengruppe** kommt aus dem Kategoriecode des Datensatzes; die zehn Hauptgruppen von
-  heisse-preise werden auf die zwölf der App abgebildet. Fleisch & Wurst trennt die App
-  vom Kühlregal, der Datensatz nicht – dort entscheidet die Wortliste. Artikel ohne Code
-  werden über dieselbe Wortliste eingeordnet.
-- Die Wortliste wird zur Laufzeit aus `index.html` gelesen (`const CAT_WORDS`), damit
-  App und Preisdatei nicht auseinanderlaufen. Ändert sich dort der Aufbau, bricht der
-  Lauf mit einer klaren Meldung ab.
-- **Regional** steht in keinem Datensatz. Es wird am Namen erkannt: Bundesländer,
-  „aus Österreich“ und dergleichen.
-
-Gemessen an der Preisdatei vom 29. Juli 2026, über die 33.097 gemeinsamen Artikel von
-Billa und Spar: Bio stimmt zu 99,9 %, die Warengruppe zu 91,8 %, Regional zu 93,0 %.
-
-**Die eine echte Verschlechterung ist Regional.** Die alte Datei kannte 2.266 regionale
-Artikel mehr, weil sie offenbar eine Liste österreichischer Erzeuger benutzte, die
-nirgends im Ordner liegt. Ein Versuch, diese Liste zu erraten, hat die Übereinstimmung
-auf 90,9 % gedrückt – die Heuristik hat „regional“ bei Artikeln behauptet, die es selbst
-nicht behaupten. Deshalb bleibt es beim engen Namensabgleich: lieber weniger Kennzeichen
-als falsche. Wer die Lücke schließen will, braucht eine gepflegte Markenliste.
-
-Bei der Warengruppe geht es in die andere Richtung: rund 2.000 der 2.726 Abweichungen
-sind Artikel, die vorher **gar keine** Warengruppe hatten und jetzt eine bekommen.
-
-### Nächster Auftrag: wöchentliche Preisdatei
-
-GitHub Action, die wöchentlich – montags um 4 Uhr – `server/build-preisdatei.js` ausführt
-und die erzeugte `preise.json` ins Repository committet. Billa und Spar kommen frisch aus
-dem veröffentlichten Datensatz; die vorhandenen **Hofer- und dm-Zeilen bleiben stehen**
-(bekräftigt am 30.07.2026 – keine Eigenabrufe, siehe Regel in CLAUDE.md; die Patches in
-`patches/` bleiben nur als Reparatur-Beleg liegen).
-
-Der Wochenrhythmus ist eine bewusste Festlegung vom 29. Juli 2026 und ersetzt die früher
-geplante tägliche Ausführung. Begründung und Folgen stehen in `server/README.md` unter
-„Wöchentlich aktualisieren".
+- Tests lesen `./index.html` und müssen aus dem Projektstamm laufen.
+- jsdom 26 liefert `TextEncoder`/`TextDecoder` nicht mit; `beforeParse` in
+  `test/harness.mjs` reicht beides nach (wie `crypto` und `fetch`).
+- Vor jeder größeren Änderung committen. Der Commit-Hook baut den Graphen
+  AST-seitig nach; nach App-Änderungen braucht es einen vollen
+  `/graphify . --update`-Lauf mit semantischer Runde (Regel in CLAUDE.md).
+- Push deployt automatisch – die volle Suite **muss** vorher grün sein.
