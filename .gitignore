@@ -10,5 +10,7 @@ graphify-out/
 # Maschinenabhängige Einstellungen. settings.json enthält absolute Pfade auf
 # einen bestimmten Rechner; auf einem anderen schlagen die Hooks bei jedem
 # Werkzeugaufruf fehl. Was "local" heißt, gehört ohnehin nicht ins Repository.
+# launch.json genauso: absoluter Pfad in ein Temp-Verzeichnis eines Rechners.
 .claude/settings.json
 .claude/settings.local.json
+.claude/launch.json
